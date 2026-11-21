@@ -31,13 +31,6 @@ try {
       ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $env:SYMPHONY_CONSOLE_TEST_TASK
     Add-Content -LiteralPath $env:SYMPHONY_CONSOLE_TEST_BOUNDARIES -Value 'autostart-registered'
   }
-  function Start-ScheduledTask {
-    param([string]$TaskName)
-    if (-not (Test-Path -LiteralPath $env:SYMPHONY_CONSOLE_TEST_TASK)) {
-      throw 'cannot start synthetic task "registration": register the test task first'
-    }
-    Add-Content -LiteralPath $env:SYMPHONY_CONSOLE_TEST_BOUNDARIES -Value 'autostart-started'
-  }
 
   # The tutorial uses a real JVM so its shutdown hook, not a PowerShell input reader, owns cancellation.
   function java {

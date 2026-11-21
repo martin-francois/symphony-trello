@@ -1,31 +1,32 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static ch.fmartin.symphony.trello.setup.SetupCliOptionNames.STATE_HOME;
+import static ch.fmartin.symphony.trello.setup.SetupEnvironmentVariables.APP_HOME_ENV;
+import static ch.fmartin.symphony.trello.setup.SetupEnvironmentVariables.CONFIG_DIR_ENV;
+import static ch.fmartin.symphony.trello.setup.SetupEnvironmentVariables.STATE_HOME_ENV;
+import static ch.fmartin.symphony.trello.setup.SetupEnvironmentVariables.WORKSPACE_ROOT_ENV;
+
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.Optional;
 
 record LocalWorkerPaths(Path appHome, Path configDir, Path workspaceRoot, Path stateHome) {
     private static final String APP_HOME_PROPERTY = "symphony.trello.app.home";
-    static final String CONFIG_DIR_ENV = "SYMPHONY_TRELLO_CONFIG_DIR";
-    private static final String WORKSPACE_ROOT_ENV = "SYMPHONY_TRELLO_WORKSPACE_ROOT";
-    static final String STATE_HOME_ENV = "SYMPHONY_TRELLO_STATE_HOME";
-    private static final String APP_HOME_ENV = "SYMPHONY_TRELLO_APP_HOME";
+
+    static LocalWorkerPaths from(LocalSetup.Options options, Map<String, String> environment) {
+        return from(
+                Optional.empty(),
+                Optional.of(options.configDir()),
+                Optional.of(options.workspaceRoot()),
+                options.stateHome(),
+                environment);
+    }
 
     /// Setup has already resolved its config directory. Keep the installation's state directory
     /// when setup uses that config; a separate config or manifest keeps its isolated state.
     static LocalWorkerPaths fromSetup(Path configDir, Path workspaceRoot, Map<String, String> environment) {
-        Path resolvedConfigDir = configDir.toAbsolutePath().normalize();
-        InstalledCliDefaults.InstalledPaths installed = InstalledCliDefaults.InstalledPaths.from(environment);
-        Optional<Path> stateHome = installed
-                .configDir()
-                .map(Path::of)
-                .map(Path::toAbsolutePath)
-                .map(Path::normalize)
-                .filter(resolvedConfigDir::equals)
-                .flatMap(ignored -> installed.stateHome())
-                .map(Path::of);
         return from(
-                Optional.empty(), Optional.of(resolvedConfigDir), Optional.of(workspaceRoot), stateHome, environment);
+                Optional.empty(), Optional.of(configDir), Optional.of(workspaceRoot), Optional.empty(), environment);
     }
 
     static LocalWorkerPaths from(
@@ -34,6 +35,22 @@ record LocalWorkerPaths(Path appHome, Path configDir, Path workspaceRoot, Path s
             Optional<Path> workspaceRoot,
             Optional<Path> stateHome,
             Map<String, String> environment) {
+        return from(
+                appHome,
+                configDir,
+                workspaceRoot,
+                stateHome,
+                environment,
+                InstalledCliDefaults.InstalledPaths.from(environment));
+    }
+
+    static LocalWorkerPaths from(
+            Optional<Path> appHome,
+            Optional<Path> configDir,
+            Optional<Path> workspaceRoot,
+            Optional<Path> stateHome,
+            Map<String, String> environment,
+            InstalledCliDefaults.InstalledPaths installedPaths) {
         boolean explicitConfigDir = configDir.isPresent();
         Path resolvedConfigDir = configDir
                 .or(() -> envPath(environment, CONFIG_DIR_ENV))
@@ -46,7 +63,8 @@ record LocalWorkerPaths(Path appHome, Path configDir, Path workspaceRoot, Path s
                 .toAbsolutePath()
                 .normalize();
         Path resolvedStateHome = stateHome
-                .or(() -> isolatedStateHome(explicitConfigDir, environment, resolvedConfigDir))
+                .or(() -> userEnvironmentStateHome(environment, installedPaths))
+                .or(() -> isolatedStateHome(explicitConfigDir, installedPaths, resolvedConfigDir))
                 .or(() -> envPath(environment, STATE_HOME_ENV))
                 .orElseGet(() -> resolvedConfigDir.resolveSibling("state"))
                 .toAbsolutePath()
@@ -58,7 +76,7 @@ record LocalWorkerPaths(Path appHome, Path configDir, Path workspaceRoot, Path s
                 .normalize();
         CliInputValidation.rejectExistingNonDirectoryPath("--config-dir", resolvedConfigDir);
         CliInputValidation.rejectExistingNonDirectoryPath("--workspace-root", resolvedWorkspaceRoot);
-        CliInputValidation.rejectExistingNonDirectoryPath("--state-home", resolvedStateHome);
+        CliInputValidation.rejectExistingNonDirectoryPath(STATE_HOME, resolvedStateHome);
         CliInputValidation.rejectExistingNonDirectoryPath("--app-home", resolvedAppHome);
         return new LocalWorkerPaths(resolvedAppHome, resolvedConfigDir, resolvedWorkspaceRoot, resolvedStateHome);
     }
@@ -99,9 +117,16 @@ record LocalWorkerPaths(Path appHome, Path configDir, Path workspaceRoot, Path s
         return value == null || value.isBlank() ? Optional.empty() : Optional.of(Path.of(value));
     }
 
+    private static Optional<Path> userEnvironmentStateHome(
+            Map<String, String> environment, InstalledCliDefaults.InstalledPaths installedPaths) {
+        return installedPaths.stateHomeFromUserEnvironment() ? envPath(environment, STATE_HOME_ENV) : Optional.empty();
+    }
+
     private static Optional<Path> isolatedStateHome(
-            boolean explicitConfigDir, Map<String, String> environment, Path resolvedConfigDir) {
-        if (!explicitConfigDir || InstalledCliDefaults.hasUserStateHomeOverride(environment)) {
+            boolean explicitConfigDir, InstalledCliDefaults.InstalledPaths installedPaths, Path resolvedConfigDir) {
+        // Presence of --config-dir is not enough to isolate: installer defaults inject the
+        // installed config dir, and that layout must keep XDG/installed state home.
+        if (!explicitConfigDir || installedPaths.matchesInstalledConfigDir(resolvedConfigDir)) {
             return Optional.empty();
         }
         return Optional.of(resolvedConfigDir.resolveSibling("state"));

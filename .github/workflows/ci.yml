@@ -162,7 +162,7 @@ jobs:
         run: .\mvnw.cmd -q '-Djunit.parallel.enabled=false' '-Dtest=WindowsBatchShimLaunchTest,ExecutableResolverTest,InteractiveCommandCancellationTest' test
       - name: PowerShell generated-wrapper lifecycle
         if: ${{ env.ISOLATE_OPENREWRITE != 'true' }}
-        run: .\mvnw.cmd -q '-Djunit.parallel.enabled=false' -Dtest=InstallerScriptLifecycleTest#powershellInstallerLifecycleInstallsStartsStopsAndUninstallsWithFakeJavaOnWindows test
+        run: .\mvnw.cmd -q '-Djunit.parallel.enabled=false' '-Dtest=InstallerScriptLifecycleTest#powershell*OnWindows,InstalledCliDefaultsTest,ManagedProcessStoreTest' test
 
   # A required check. The test job skips the PowerShell tests and windows-powershell runs the
   # runner's own pwsh, so without this job a .NET SDK image update would automerge with nothing
