@@ -4,7 +4,7 @@ terraform {
   required_providers {
     posthog = {
       source  = "PostHog/posthog"
-      version = "1.0.31"
+      version = "1.0.32"
     }
   }
 
