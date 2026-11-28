@@ -340,7 +340,11 @@ final class BoardCardCommands {
         }
     }
 
-    record Changed(Change status, BoardView board, CardSummary card, @Nullable ListView list) implements Result {}
+    record Changed(
+            Change status,
+            BoardView board,
+            CardSummary card,
+            @Nullable ListView list) implements Result {}
 
     /// The write a [Changed] result reports. Its JSON form is the lower-case name, such as
     /// `card_moved`.

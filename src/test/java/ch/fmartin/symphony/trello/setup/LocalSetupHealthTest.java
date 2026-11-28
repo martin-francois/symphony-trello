@@ -186,15 +186,12 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
                 String.valueOf(envPort)));
         Path workflow = tempDir.resolve("WORKFLOW.env-precedence.md");
         Path env = tempDir.resolve(".env.env-precedence");
-        Files.writeString(
-                env,
-                """
+        Files.writeString(env, """
                 TRELLO_API_KEY=key
                 TRELLO_API_TOKEN=token
                 TRELLO_API_ENDPOINT=%s
                 SYMPHONY_HTTP_PORT=%d
-                """
-                        .formatted(endpoint(), dotenvPort));
+                """.formatted(endpoint(), dotenvPort));
 
         // when
         SetupRunResult setupResult = runSetup(
@@ -305,20 +302,18 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
         Files.createDirectories(fixture.workspaceRoot());
         Files.writeString(workspaceFile, "not a directory");
         writeWorkflow(workflow, "synthetic-board", 20451);
-        fixture.givenManifest(
-                """
+        fixture.givenManifest("""
                 {"boards":[
                   {"boardId":"synthetic-board","boardKey":"synthetic","boardName":"Workspace File","boardUrl":"https://trello.example/workspace-file","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":20451,"githubEnabled":false,"dangerFullAccess":false,"additionalWritableRoots":[]},
                   {"boardId":"synthetic-board","boardKey":"synthetic","boardName":"Env Directory","boardUrl":"https://trello.example/env-directory","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":20453,"githubEnabled":false,"dangerFullAccess":false,"additionalWritableRoots":["relative/path"]}
                 ]}
-                """
-                        .formatted(
-                                json(workflow),
-                                json(configDir.resolve(".env.workspace-file")),
-                                json(workspaceFile),
-                                json(workflow),
-                                json(envDirectory),
-                                json(fixture.workspaceRoot())));
+                """.formatted(
+                        json(workflow),
+                        json(configDir.resolve(".env.workspace-file")),
+                        json(workspaceFile),
+                        json(workflow),
+                        json(envDirectory),
+                        json(fixture.workspaceRoot())));
 
         // when
         SetupRunResult result = runSetup("check", "--endpoint", endpoint());
@@ -347,8 +342,7 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
         fixture.givenManifest(
                 """
                 {"boards":[{"boardId":"synthetic-board","boardKey":"synthetic","boardName":"Sneaky \\"Q\\"\\nBoard","boardUrl":"https://trello.example/synthetic","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":20455,"githubEnabled":"false","dangerFullAccess":false,"additionalWritableRoots":[]}]}
-                """
-                        .formatted(json(workflow), json(configDir.resolve(".env")), json(fixture.workspaceRoot())));
+                """.formatted(json(workflow), json(configDir.resolve(".env")), json(fixture.workspaceRoot())));
 
         // when
         SetupRunResult result = runSetup("check", "--endpoint", endpoint());
@@ -371,8 +365,7 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
         fixture.givenManifest(
                 """
                 {"boards":[{"boardId":"synthetic-board","boardKey":"synthetic","boardName":"Synthetic Board","boardUrl":"https://trello.example/synthetic","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":"20454","githubEnabled":"false","dangerFullAccess":"false","additionalWritableRoots":"relative/path"}]}
-                """
-                        .formatted(json(workflow), json(configDir.resolve(".env")), json(fixture.workspaceRoot())));
+                """.formatted(json(workflow), json(configDir.resolve(".env")), json(fixture.workspaceRoot())));
 
         // when
         SetupRunResult result = runSetup("check", "--endpoint", endpoint());
@@ -395,14 +388,12 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
         // given
         Path configDir = fixture.configDir();
         Files.createDirectories(configDir);
-        fixture.givenManifest(
-                """
+        fixture.givenManifest("""
                 {"boards":[null,{"boardId":"synthetic-board","boardKey":"synthetic","boardName":"Synthetic Board","boardUrl":"https://trello.example/synthetic","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":20454,"additionalWritableRoots":[null]}]}
-                """
-                        .formatted(
-                                json(configDir.resolve("WORKFLOW.null-shapes.md")),
-                                json(configDir.resolve(".env")),
-                                json(fixture.workspaceRoot())));
+                """.formatted(
+                        json(configDir.resolve("WORKFLOW.null-shapes.md")),
+                        json(configDir.resolve(".env")),
+                        json(fixture.workspaceRoot())));
 
         // when
         SetupRunResult result = runSetup("check", "--endpoint", endpoint());
@@ -422,11 +413,9 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
         // given
         Path configDir = fixture.configDir();
         Files.createDirectories(configDir);
-        fixture.givenManifest(
-                """
+        fixture.givenManifest("""
                 {"boards":[{"boardId":"synthetic-board","boardKey":"synthetic","boardName":"Synthetic Board","boardUrl":"https://trello.example/synthetic","workspaceRoot":"%s","serverPort":20456,"githubEnabled":false,"dangerFullAccess":false,"additionalWritableRoots":[]}]}
-                """
-                        .formatted(json(fixture.workspaceRoot())));
+                """.formatted(json(fixture.workspaceRoot())));
 
         // when
         SetupRunResult result = runSetup("check", "--endpoint", endpoint());
@@ -455,20 +444,18 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
         Files.writeString(env, TestEnv.trelloCredentials());
         writeWorkflow(workflow, "valid-board-id", 20457);
         commands.startHealthServer(workflow, "other-board");
-        fixture.givenManifest(
-                """
+        fixture.givenManifest("""
                 {"boards":[
                   {"boardId":"missing-name-id","boardKey":"missing-name-key","boardUrl":"https://trello.example/missing-name","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":20458,"githubEnabled":false,"dangerFullAccess":false,"additionalWritableRoots":[]},
                   {"boardId":"valid-board-id","boardKey":"valid-key","boardName":"Valid Board","boardUrl":"https://trello.example/valid","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":20457,"githubEnabled":false,"dangerFullAccess":false,"additionalWritableRoots":[]}
                 ]}
-                """
-                        .formatted(
-                                json(configDir.resolve("WORKFLOW.missing-name.md")),
-                                json(configDir.resolve(".env.missing-name")),
-                                json(fixture.workspaceRoot()),
-                                json(workflow),
-                                json(env),
-                                json(fixture.workspaceRoot())));
+                """.formatted(
+                        json(configDir.resolve("WORKFLOW.missing-name.md")),
+                        json(configDir.resolve(".env.missing-name")),
+                        json(fixture.workspaceRoot()),
+                        json(workflow),
+                        json(env),
+                        json(fixture.workspaceRoot())));
 
         // when
         SetupRunResult result = runSetup("check", "--board", "valid-key", "--endpoint", endpoint());
@@ -493,20 +480,18 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
         Files.createDirectories(fixture.workspaceRoot());
         Files.writeString(env, TestEnv.trelloCredentials());
         writeWorkflow(workflow, "valid-board-id", 20457);
-        fixture.givenManifest(
-                """
+        fixture.givenManifest("""
                 {"boards":[
                   {"boardId":"missing-name-id","boardKey":"missing-name-key","boardUrl":"https://trello.example/missing-name","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":20458,"githubEnabled":false,"dangerFullAccess":false,"additionalWritableRoots":[]},
                   {"boardId":"valid-board-id","boardKey":"valid-key","boardName":"Valid Board","boardUrl":"https://trello.example/valid","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":20457,"githubEnabled":false,"dangerFullAccess":false,"additionalWritableRoots":[]}
                 ]}
-                """
-                        .formatted(
-                                json(configDir.resolve("WORKFLOW.missing-name.md")),
-                                json(configDir.resolve(".env.missing-name")),
-                                json(fixture.workspaceRoot()),
-                                json(workflow),
-                                json(env),
-                                json(fixture.workspaceRoot())));
+                """.formatted(
+                        json(configDir.resolve("WORKFLOW.missing-name.md")),
+                        json(configDir.resolve(".env.missing-name")),
+                        json(fixture.workspaceRoot()),
+                        json(workflow),
+                        json(env),
+                        json(fixture.workspaceRoot())));
 
         // when
         SetupRunResult result = runSetup("check", "--board", "missing-private-selector", "--endpoint", endpoint());
@@ -530,8 +515,7 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
         fixture.givenManifest(
                 """
                 {"boards":[{"boardId":"synthetic-board","boardKey":"synthetic","boardName":"Synthetic Board","boardUrl":"https://trello.example/synthetic","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":65536,"githubEnabled":false,"dangerFullAccess":false,"additionalWritableRoots":[]}]}
-                """
-                        .formatted(json(workflow), json(configDir.resolve(".env")), json(fixture.workspaceRoot())));
+                """.formatted(json(workflow), json(configDir.resolve(".env")), json(fixture.workspaceRoot())));
 
         // when
         SetupRunResult result = runSetup("check", "--endpoint", endpoint());

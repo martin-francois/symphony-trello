@@ -91,10 +91,7 @@ final class TrelloCredentialStoreTest {
                 .write(directCredentials(TrelloBoardSetup.DEFAULT_ENDPOINT), env, new RecordingTerminal());
 
         // then
-        assertThat(env)
-                .content(StandardCharsets.UTF_8)
-                .isEqualTo(
-                        """
+        assertThat(env).content(StandardCharsets.UTF_8).isEqualTo("""
                         TRELLO_API_ENDPOINT=https://api.trello.com/1
                         # preserved comment
                         TRELLO_API_KEY=direct-key
@@ -113,10 +110,7 @@ final class TrelloCredentialStoreTest {
         new TrelloCredentialStore(Map.of()).write(directCredentials(FOREIGN_ENDPOINT_URI), env, terminal);
 
         // then
-        assertThat(env)
-                .content(StandardCharsets.UTF_8)
-                .isEqualTo(
-                        """
+        assertThat(env).content(StandardCharsets.UTF_8).isEqualTo("""
                         TRELLO_API_ENDPOINT=HTTPS://Trello.Example.Test:443/1/
                         TRELLO_API_KEY=direct-key
                         TRELLO_API_TOKEN=direct-token

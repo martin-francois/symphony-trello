@@ -270,7 +270,8 @@ public record EffectiveConfig(
     /// Branch-only handoff settings from the workflow's `github` section. A `null` label means the
     /// card-level label signal is disabled.
     @NullMarked
-    public record GitHubConfig(PullRequestMode pullRequestMode, @Nullable String noPrLabel) {
+    public record GitHubConfig(
+            PullRequestMode pullRequestMode, @Nullable String noPrLabel) {
         public static final GitHubConfig DEFAULTS =
                 new GitHubConfig(PullRequestMode.CREATE, ConfigDefaults.DEFAULT_NO_PR_LABEL);
 

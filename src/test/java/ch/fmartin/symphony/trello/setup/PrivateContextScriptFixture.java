@@ -9,9 +9,7 @@ final class PrivateContextScriptFixture {
 
     static Path installFakeBetterLeaks(Path directory) throws Exception {
         Path command = directory.resolve("betterleaks");
-        writeExecutable(
-                command,
-                """
+        writeExecutable(command, """
                 #!/usr/bin/env bash
                 set -euo pipefail
 
@@ -91,9 +89,7 @@ final class PrivateContextScriptFixture {
 
     static Path installFakeDockerBetterLeaks(Path directory) throws Exception {
         Path command = directory.resolve("docker");
-        writeExecutable(
-                command,
-                """
+        writeExecutable(command, """
                 #!/usr/bin/env bash
                 set -euo pipefail
 

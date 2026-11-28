@@ -28,8 +28,7 @@ final class CodexReviewTiming {
         return """
                 the loop start time, for example with `date +%%s`. The whole loop, every round included, has %d
                   seconds. Do not start a round when no whole second of the budget is left, because `timeout 0s`
-                  runs without a limit; that means the time budget ran out."""
-                .formatted(budgetSeconds(codexReview));
+                  runs without a limit; that means the time budget ran out.""".formatted(budgetSeconds(codexReview));
     }
 
     /// Agents stopped slow review runs themselves, sometimes after acting on partial output, so only
@@ -44,8 +43,7 @@ final class CodexReviewTiming {
                    the stall check (`codex.stall_timeout_ms`) and the turn's silence timeout never see the wait as
                    silence.
                    A run the wrapper stopped means the time budget ran out: the loop ends, and the rule below for an
-                   unfinished review applies."""
-                .formatted(pollWaitSeconds(codex.stallTimeout()));
+                   unfinished review applies.""".formatted(pollWaitSeconds(codex.stallTimeout()));
     }
 
     /// The handoff note when the budget, not a clean round or the round limit, ended the loop.
@@ -53,8 +51,7 @@ final class CodexReviewTiming {
         return """
                 When the time budget ended it, say plainly in the handoff comment and the workpad that the review
                 stopped because its time budget ran out, and suggest raising `%s` in the workflow file, which is now
-                `%d`."""
-                .formatted(
+                `%d`.""".formatted(
                         EffectiveConfig.CodexReviewConfig.TIMEOUT_MS_PATH,
                         codexReview.timeout().toMillis());
     }

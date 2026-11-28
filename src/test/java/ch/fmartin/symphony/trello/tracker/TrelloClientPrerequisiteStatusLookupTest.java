@@ -234,14 +234,12 @@ final class TrelloClientPrerequisiteStatusLookupTest {
     @ValueSource(strings = {"", "_Managed by Symphony_", "_Written by Symphony_"})
     void unchangedResolvedStatusRetainsItsAttributionAcrossWarmPolls(String footer) {
         // given
-        String resolved =
-                """
+        String resolved = """
                 ## Symphony Prerequisite Status
 
                 Status: prerequisites resolved.
 
-                Symphony may start this Trello card when other dispatch rules allow."""
-                        + (footer.isEmpty() ? "" : "\n\n" + footer);
+                Symphony may start this Trello card when other dispatch rules allow.""" + (footer.isEmpty() ? "" : "\n\n" + footer);
         FakeCard card = board.addCard("ready", TODO_LIST).withComment(resolved);
 
         // when

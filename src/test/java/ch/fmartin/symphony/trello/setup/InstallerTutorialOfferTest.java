@@ -159,8 +159,7 @@ final class InstallerTutorialOfferTest {
                                 "env -u SYMPHONY_TRELLO_INSTALLER_COMPLETION \"${SYMPHONY_TRELLO_COMMAND:?}\" start",
                                 "env -u SYMPHONY_TRELLO_INSTALLER_COMPLETION pwsh -NoProfile -File \"${SYMPHONY_TRELLO_COMMAND:?}\" start"));
         writeExecutable(
-                tools.resolve("java"),
-                """
+                tools.resolve("java"), """
                 #!/usr/bin/env bash
                 set -euo pipefail
                 if [[ "$*" == *"TrelloBoardSetupMain tutorial --offer"* ]]; then
@@ -180,8 +179,7 @@ final class InstallerTutorialOfferTest {
                   exit 0
                 fi
                 exec %s "$@"
-                """
-                        .formatted(GuidedTutorial.OFFER_PROMPT, shellQuote(fakeJava.toString())));
+                """.formatted(GuidedTutorial.OFFER_PROMPT, shellQuote(fakeJava.toString())));
         Path home = Files.createDirectories(temporaryDirectory.resolve("home"));
         Path installHome = temporaryDirectory.resolve("installed");
         Path bin = temporaryDirectory.resolve("bin");
@@ -284,9 +282,7 @@ final class InstallerTutorialOfferTest {
         // Match the real worker's session detachment, so closing the installer's PTY does not
         // kill the fake worker before the survivor assertion observes it.
         Files.writeString(fakeJava, Files.readString(fakeJava).replace("bash -c '", detachedWorker + " -c '"));
-        writeExecutable(
-                tools.resolve("java"),
-                """
+        writeExecutable(tools.resolve("java"), """
                 #!/usr/bin/env bash
                 set -euo pipefail
                 if [[ "$*" == *"TrelloBoardSetupMain tutorial --offer"* ]]; then
@@ -295,13 +291,12 @@ final class InstallerTutorialOfferTest {
                     --endpoint %s --key synthetic-key --token synthetic-token --no-github
                 fi
                 exec %s "$@"
-                """
-                        .formatted(
-                                shellQuote(Path.of(System.getProperty("java.home"), "bin", "java")
-                                        .toString()),
-                                shellQuote(System.getProperty("java.class.path")),
-                                shellQuote(trello.endpoint().toString()),
-                                shellQuote(fakeJava.toString())));
+                """.formatted(
+                        shellQuote(Path.of(System.getProperty("java.home"), "bin", "java")
+                                .toString()),
+                        shellQuote(System.getProperty("java.class.path")),
+                        shellQuote(trello.endpoint().toString()),
+                        shellQuote(fakeJava.toString())));
         Path home = Files.createDirectories(temporaryDirectory.resolve("home"));
         Path installHome = temporaryDirectory.resolve("installed");
         Path bin = temporaryDirectory.resolve("bin");

@@ -22,8 +22,7 @@ final class WorkflowLoaderTest {
     void loadsCurrentWorkflowWithoutAddingGeneratedMetadataOrSandboxPolicy() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        String original = workflowWithBody(
-                """
+        String original = workflowWithBody("""
                 ## Operating Posture
 
                 Current workflow body.
@@ -43,9 +42,7 @@ final class WorkflowLoaderTest {
     void preservesHandAuthoredSymphonySectionAsPlainConfig() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.hand-authored-symphony.md");
-        String original = workflowWithExtraFrontMatter(
-                "symphony: local-notes",
-                """
+        String original = workflowWithExtraFrontMatter("symphony: local-notes", """
                 # Custom workflow
 
                 This workflow uses a private top-level symphony note.
@@ -65,8 +62,7 @@ final class WorkflowLoaderTest {
     void loadsExistingWorkflowBodyWithoutAdaptingOrRejectingIt() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.current-unmarked.md");
-        String original = workflowWithBody(
-                """
+        String original = workflowWithBody("""
                 ## Operating Posture
 
                 This is an unattended orchestration run.
@@ -110,13 +106,11 @@ final class WorkflowLoaderTest {
     void preservesNestedNullConfigValues() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.nested-null.md");
-        String original = workflowWithExtraFrontMatter(
-                """
+        String original = workflowWithExtraFrontMatter("""
                 repository:
                   default_url: null
                   default_path: null
-                """,
-                "Body");
+                """, "Body");
         Files.writeString(workflow, original);
 
         // when
@@ -154,7 +148,6 @@ final class WorkflowLoaderTest {
                 %s
                 ---
                 %s
-                """
-                .formatted(extraFrontMatter.stripTrailing(), body);
+                """.formatted(extraFrontMatter.stripTrailing(), body);
     }
 }

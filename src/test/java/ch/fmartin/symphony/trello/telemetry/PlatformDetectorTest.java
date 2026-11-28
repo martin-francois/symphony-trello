@@ -19,9 +19,7 @@ final class PlatformDetectorTest {
     void osReleaseReaderKeepsOnlyIdAndVersionIdAndUnquotes() throws IOException {
         // given
         Path osRelease = tempDir.resolve("os-release");
-        Files.writeString(
-                osRelease,
-                """
+        Files.writeString(osRelease, """
                 PRETTY_NAME="Ubuntu 24.04.3 LTS"
                 NAME="Ubuntu"
                 VERSION_ID="24.04"

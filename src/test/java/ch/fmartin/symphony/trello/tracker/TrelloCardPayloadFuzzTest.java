@@ -46,12 +46,9 @@ final class TrelloCardPayloadFuzzTest {
     void mappingDoesNotReadTheLocalEnvironment() {
         // given
         FuzzedDataProvider data = mock();
-        when(data.consumeBytes(anyInt()))
-                .thenReturn(
-                        """
+        when(data.consumeBytes(anyInt())).thenReturn("""
                 {"id":"card-1","name":"Task","idBoard":"board-1","idList":"list-todo"}
-                """
-                                .getBytes(StandardCharsets.UTF_8));
+                """.getBytes(StandardCharsets.UTF_8));
         try (MockedStatic<LocalEnvironment> localEnvironment = mockStatic(LocalEnvironment.class)) {
             localEnvironment
                     .when(() -> LocalEnvironment.get(anyString()))

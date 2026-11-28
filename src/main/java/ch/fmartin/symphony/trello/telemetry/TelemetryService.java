@@ -340,26 +340,24 @@ public final class TelemetryService {
             out.println("No erasure has been requested.");
             return EXIT_OK;
         }
-        String message =
-                switch (erasure.phase()) {
-                    case REQUESTED ->
-                        "Erasure is not yet confirmed as accepted. Reporting is off. Retry with `"
-                                + TelemetryNotice.ERASE_STATUS_COMMAND + "`; running workers also retry.";
-                    case ACCEPTED ->
-                        "Erasure accepted: the data is deleted within 30 days of the request, without this command"
-                                + " running. Reporting is off.";
-                    case COMPLETE ->
-                        "Erasure complete. Reporting remains off until you run `" + TelemetryNotice.ENABLE_COMMAND
-                                + "`.";
-                    case INCOMPLETE ->
-                        "Erasure is still being processed: the remaining data is deleted within 30 days of the"
-                                + " request. Reporting is off. `" + TelemetryNotice.ENABLE_COMMAND
-                                + "` resumes reporting under a new analytics ID.";
-                    case REFUSED ->
-                        "Automatic erasure refused because the provider identity is inconsistent. Reporting is off; contact"
-                                + " the maintainer for manual deletion. `" + TelemetryNotice.ENABLE_COMMAND
-                                + "` resumes reporting under a new analytics ID.";
-                };
+        String message = switch (erasure.phase()) {
+            case REQUESTED ->
+                "Erasure is not yet confirmed as accepted. Reporting is off. Retry with `"
+                        + TelemetryNotice.ERASE_STATUS_COMMAND + "`; running workers also retry.";
+            case ACCEPTED ->
+                "Erasure accepted: the data is deleted within 30 days of the request, without this command"
+                        + " running. Reporting is off.";
+            case COMPLETE ->
+                "Erasure complete. Reporting remains off until you run `" + TelemetryNotice.ENABLE_COMMAND + "`.";
+            case INCOMPLETE ->
+                "Erasure is still being processed: the remaining data is deleted within 30 days of the"
+                        + " request. Reporting is off. `" + TelemetryNotice.ENABLE_COMMAND
+                        + "` resumes reporting under a new analytics ID.";
+            case REFUSED ->
+                "Automatic erasure refused because the provider identity is inconsistent. Reporting is off; contact"
+                        + " the maintainer for manual deletion. `" + TelemetryNotice.ENABLE_COMMAND
+                        + "` resumes reporting under a new analytics ID.";
+        };
         out.println(message);
         // Only a refusal needs the user to act; an incomplete erasure finishes on the maintainer's side.
         return erasure.phase() == TelemetryOwnership.Phase.REFUSED ? EXIT_FAILURE : EXIT_OK;

@@ -119,14 +119,16 @@ final class SetupDiagnosticReporterTest {
         boolean reportsIoFailure = SetupDiagnosticReporter.shouldReport(new IOException("boom"));
 
         // then
-        assertThat(expectedFailureCodes).allSatisfy(code -> assertThat(
-                        SetupDiagnosticReporter.shouldReport(new TrelloBoardSetupException(code, "expected failure")))
-                .as(code)
-                .isFalse());
-        assertThat(unexpectedFailureCodes).allSatisfy(code -> assertThat(
-                        SetupDiagnosticReporter.shouldReport(new TrelloBoardSetupException(code, "unexpected failure")))
-                .as(code)
-                .isTrue());
+        assertThat(expectedFailureCodes)
+                .allSatisfy(code -> assertThat(SetupDiagnosticReporter.shouldReport(
+                                new TrelloBoardSetupException(code, "expected failure")))
+                        .as(code)
+                        .isFalse());
+        assertThat(unexpectedFailureCodes)
+                .allSatisfy(code -> assertThat(SetupDiagnosticReporter.shouldReport(
+                                new TrelloBoardSetupException(code, "unexpected failure")))
+                        .as(code)
+                        .isTrue());
         assertThat(reportsIoFailure)
                 .as("unexpected I/O failures are reportable diagnostics")
                 .isTrue();
@@ -156,8 +158,9 @@ final class SetupDiagnosticReporterTest {
         Optional<String> hint = SetupDiagnosticReporter.userActionHint(unknownWrite);
 
         // then
-        assertThat(hint).hasValueSatisfying(value -> assertThat(value)
-                .contains("Check Trello for any board or list that may already have been created"));
+        assertThat(hint)
+                .hasValueSatisfying(value -> assertThat(value)
+                        .contains("Check Trello for any board or list that may already have been created"));
     }
 
     @Test
@@ -169,11 +172,13 @@ final class SetupDiagnosticReporterTest {
         Optional<String> hint = SetupDiagnosticReporter.userActionHint(missingApiToken);
 
         // then
-        assertThat(hint).hasValueSatisfying(value -> assertThat(value)
-                .contains("Provide Trello credentials with --key and --token, set TRELLO_API_KEY and TRELLO_API_TOKEN")
-                .contains("this .env credential file:\n  ")
-                .contains(".env")
-                .doesNotContain("local .env file", "usually"));
+        assertThat(hint)
+                .hasValueSatisfying(value -> assertThat(value)
+                        .contains(
+                                "Provide Trello credentials with --key and --token, set TRELLO_API_KEY and TRELLO_API_TOKEN")
+                        .contains("this .env credential file:\n  ")
+                        .contains(".env")
+                        .doesNotContain("local .env file", "usually"));
     }
 
     @Test
@@ -186,10 +191,11 @@ final class SetupDiagnosticReporterTest {
         Optional<String> hint = SetupDiagnosticReporter.userActionHint(duplicateWorkflowRows);
 
         // then
-        assertThat(hint).hasValueSatisfying(value -> assertThat(value)
-                .contains("Remove duplicate rows for the same workflow from " + ConnectedBoardManifest.FILE_NAME
-                        + " in the active Symphony config directory")
-                .doesNotContain(tempDir.toString(), "WORKFLOW", "board-1", "board-2"));
+        assertThat(hint)
+                .hasValueSatisfying(value -> assertThat(value)
+                        .contains("Remove duplicate rows for the same workflow from " + ConnectedBoardManifest.FILE_NAME
+                                + " in the active Symphony config directory")
+                        .doesNotContain(tempDir.toString(), "WORKFLOW", "board-1", "board-2"));
     }
 
     @Test
@@ -203,13 +209,14 @@ final class SetupDiagnosticReporterTest {
         Optional<String> hint = SetupDiagnosticReporter.userActionHint(missingWorkerCredentials);
 
         // then
-        assertThat(hint).hasValueSatisfying(value -> assertThat(value)
-                .contains(
-                        "Set these Trello credential variables",
-                        "CUSTOM_TRELLO_API_KEY=<your Trello API key>",
-                        "CUSTOM_TRELLO_API_TOKEN=<your Trello token>",
-                        "File:\n  ")
-                .doesNotContain("referenced by the workflow", "local .env file"));
+        assertThat(hint)
+                .hasValueSatisfying(value -> assertThat(value)
+                        .contains(
+                                "Set these Trello credential variables",
+                                "CUSTOM_TRELLO_API_KEY=<your Trello API key>",
+                                "CUSTOM_TRELLO_API_TOKEN=<your Trello token>",
+                                "File:\n  ")
+                        .doesNotContain("referenced by the workflow", "local .env file"));
     }
 
     @Test
@@ -226,11 +233,12 @@ final class SetupDiagnosticReporterTest {
         Optional<String> hint = SetupDiagnosticReporter.userActionHint(authFailure);
 
         // then
-        assertThat(hint).hasValueSatisfying(value -> assertThat(value)
-                .contains(
-                        "Check TRELLO_API_KEY and TRELLO_API_TOKEN from the shell environment.",
-                        "Shell variables take precedence over the .env file passed with --env.")
-                .doesNotContain("shell-key", "shell-token", tempDir.toString()));
+        assertThat(hint)
+                .hasValueSatisfying(value -> assertThat(value)
+                        .contains(
+                                "Check TRELLO_API_KEY and TRELLO_API_TOKEN from the shell environment.",
+                                "Shell variables take precedence over the .env file passed with --env.")
+                        .doesNotContain("shell-key", "shell-token", tempDir.toString()));
     }
 
     @ParameterizedTest
@@ -292,9 +300,7 @@ final class SetupDiagnosticReporterTest {
     void diagnosticsSkipsHealthProbesForOutOfRangePorts() throws Exception {
         // given
         DiagnosticsFixture fixture = DiagnosticsFixture.create(tempDir, "bad-port");
-        Path workflow = fixture.workflow(
-                "WORKFLOW.badport.md",
-                """
+        Path workflow = fixture.workflow("WORKFLOW.badport.md", """
                 ---
                 tracker:
                   kind: trello
@@ -381,9 +387,7 @@ final class SetupDiagnosticReporterTest {
     void diagnosticsDoNotProbeManifestPortWhenWorkflowDeclaresNonNumericPort() throws Exception {
         // given
         DiagnosticsFixture fixture = DiagnosticsFixture.create(tempDir, "non-numeric-port");
-        Path workflow = fixture.workflow(
-                "WORKFLOW.non-numeric-port.md",
-                """
+        Path workflow = fixture.workflow("WORKFLOW.non-numeric-port.md", """
                 ---
                 tracker:
                   kind: trello
@@ -406,9 +410,7 @@ final class SetupDiagnosticReporterTest {
     void diagnosticsProbeManifestPortWhenWorkflowOmitsServerPort() throws Exception {
         // given
         DiagnosticsFixture fixture = DiagnosticsFixture.create(tempDir, "omitted-port");
-        Path workflow = fixture.workflow(
-                "WORKFLOW.omitted-port.md",
-                """
+        Path workflow = fixture.workflow("WORKFLOW.omitted-port.md", """
                 ---
                 tracker:
                   kind: trello
@@ -450,9 +452,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(stateHome);
         Path workflow = configDir.resolve("WORKFLOW.selected-env-port.md");
         Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithEnvironmentBackedPort());
-        Files.writeString(
-                configDir.resolve(".env"),
-                """
+        Files.writeString(configDir.resolve(".env"), """
                 BOARD_ID_REF=000000000000000000000001
                 BOARD_STATUS_PORT=20728
                 """);
@@ -1089,9 +1089,7 @@ final class SetupDiagnosticReporterTest {
         Path stateHome = tempDir.resolve("state");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(
-                configDir.resolve(ConnectedBoardManifest.FILE_NAME),
-                """
+        Files.writeString(configDir.resolve(ConnectedBoardManifest.FILE_NAME), """
                 {"boards":[{},{"boardName":"Private Board","boardId":"abc","boardKey":"def","serverPort":18199}]}
                 """);
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
@@ -1115,9 +1113,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
         Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(20723));
-        Files.writeString(
-                configDir.resolve(ConnectedBoardManifest.FILE_NAME),
-                """
+        Files.writeString(configDir.resolve(ConnectedBoardManifest.FILE_NAME), """
                 {"boards":[{}]}
                 """);
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
@@ -1142,12 +1138,9 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
         Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(20724));
-        Files.writeString(
-                configDir.resolve(ConnectedBoardManifest.FILE_NAME),
-                """
+        Files.writeString(configDir.resolve(ConnectedBoardManifest.FILE_NAME), """
                 {"boards":[{"boardName":"Private Board","boardId":"abc","boardKey":"def","serverPort":%d}]}
-                """
-                        .formatted(privateRowPort));
+                """.formatted(privateRowPort));
         var reporter = new SetupDiagnosticReporter(
                 Map.of(), new FakeCommandRunner(), Files::list, clockWithPortInTimeUtc(privateRowPort));
 
@@ -1239,8 +1232,9 @@ final class SetupDiagnosticReporterTest {
 
         // then
         assertThat(thrown)
-                .isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> assertThat(failure.getMessage())
-                        .contains("--state-home must be a directory."));
+                .isInstanceOfSatisfying(
+                        TrelloBoardSetupException.class,
+                        failure -> assertThat(failure.getMessage()).contains("--state-home must be a directory."));
     }
 
     @Test
@@ -1356,8 +1350,10 @@ final class SetupDiagnosticReporterTest {
 
         // then
         assertThat(thrown)
-                .isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> assertThat(failure.getMessage())
-                        .contains("--workflow must reference a readable workflow file"));
+                .isInstanceOfSatisfying(
+                        TrelloBoardSetupException.class,
+                        failure -> assertThat(failure.getMessage())
+                                .contains("--workflow must reference a readable workflow file"));
     }
 
     @Test
@@ -1450,11 +1446,12 @@ final class SetupDiagnosticReporterTest {
         Optional<String> hint = SetupDiagnosticReporter.userActionHint(authFailure);
 
         // then
-        assertThat(hint).hasValueSatisfying(value -> assertThat(value)
-                .contains(
-                        "Check TRELLO_API_KEY and TRELLO_API_TOKEN in this .env credential file:",
-                        SetupDiagnosticReporter.displayPath(env))
-                .doesNotContain("dotenv-key", "dotenv-token", "shell environment"));
+        assertThat(hint)
+                .hasValueSatisfying(value -> assertThat(value)
+                        .contains(
+                                "Check TRELLO_API_KEY and TRELLO_API_TOKEN in this .env credential file:",
+                                SetupDiagnosticReporter.displayPath(env))
+                        .doesNotContain("dotenv-key", "dotenv-token", "shell environment"));
     }
 
     @Test
@@ -1472,13 +1469,14 @@ final class SetupDiagnosticReporterTest {
         Optional<String> hint = SetupDiagnosticReporter.userActionHint(authFailure);
 
         // then
-        assertThat(hint).hasValueSatisfying(value -> assertThat(value)
-                .contains(
-                        "Check these Trello credential sources:",
-                        "TRELLO_API_KEY: .env credential file\n    " + SetupDiagnosticReporter.displayPath(env),
-                        "TRELLO_API_TOKEN: shell environment",
-                        "Shell variables take precedence over the .env file passed with --env.")
-                .doesNotContain("dotenv-key", "shell-token"));
+        assertThat(hint)
+                .hasValueSatisfying(value -> assertThat(value)
+                        .contains(
+                                "Check these Trello credential sources:",
+                                "TRELLO_API_KEY: .env credential file\n    " + SetupDiagnosticReporter.displayPath(env),
+                                "TRELLO_API_TOKEN: shell environment",
+                                "Shell variables take precedence over the .env file passed with --env.")
+                        .doesNotContain("dotenv-key", "shell-token"));
     }
 
     @Test
@@ -1494,11 +1492,12 @@ final class SetupDiagnosticReporterTest {
         Optional<String> hint = SetupDiagnosticReporter.userActionHint(authFailure);
 
         // then
-        assertThat(hint).hasValueSatisfying(value -> assertThat(value)
-                .contains(
-                        "Check these Trello credential sources:",
-                        "TRELLO_API_KEY: entered directly with --key, --token, or the setup prompt",
-                        "TRELLO_API_TOKEN: shell environment"));
+        assertThat(hint)
+                .hasValueSatisfying(value -> assertThat(value)
+                        .contains(
+                                "Check these Trello credential sources:",
+                                "TRELLO_API_KEY: entered directly with --key, --token, or the setup prompt",
+                                "TRELLO_API_TOKEN: shell environment"));
     }
 
     @Test
@@ -1513,12 +1512,13 @@ final class SetupDiagnosticReporterTest {
         Optional<String> hint = SetupDiagnosticReporter.userActionHint(authFailure);
 
         // then
-        assertThat(hint).hasValueSatisfying(value -> assertThat(value)
-                .contains(
-                        "Check these Trello credential sources:",
-                        "tracker.api_key: workflow configuration",
-                        "tracker.api_token: workflow configuration")
-                .doesNotContain("TRELLO_API_KEY", "TRELLO_API_TOKEN"));
+        assertThat(hint)
+                .hasValueSatisfying(value -> assertThat(value)
+                        .contains(
+                                "Check these Trello credential sources:",
+                                "tracker.api_key: workflow configuration",
+                                "tracker.api_token: workflow configuration")
+                        .doesNotContain("TRELLO_API_KEY", "TRELLO_API_TOKEN"));
     }
 
     @Test
@@ -1602,17 +1602,13 @@ final class SetupDiagnosticReporterTest {
                                 List.of(),
                                 false))));
         var store = new ManagedProcessStore(stateHome);
-        Files.writeString(
-                store.files(privateWorkflow).stderrLog(),
-                """
+        Files.writeString(store.files(privateWorkflow).stderrLog(), """
                 TRELLO_API_TOKEN=trello-secret
                 board https://trello.com/b/SYNTH901/sensitive-board
                 repo /Users/Jane Doe/client/private-repo
                 selected-tail-line
                 """);
-        Files.writeString(
-                store.files(otherWorkflow).stderrLog(),
-                """
+        Files.writeString(store.files(otherWorkflow).stderrLog(), """
                 other-board-secret
                 other-tail-line
                 """);
@@ -1746,9 +1742,7 @@ final class SetupDiagnosticReporterTest {
         Path env = configDir.resolve(".env.env-backed");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   board_id: $SYNTHETIC_BOARD_ID
@@ -1761,9 +1755,7 @@ final class SetupDiagnosticReporterTest {
                 ---
                 Body
                 """);
-        Files.writeString(
-                env,
-                """
+        Files.writeString(env, """
                 SYNTHETIC_BOARD_ID=resolved-env-board-id
                 SYNTHETIC_WORKER_PORT=19301
                 """);
@@ -2049,14 +2041,12 @@ final class SetupDiagnosticReporterTest {
         Path installedWorkspaceRoot = tempDir.resolve("installed").resolve("workspaces");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(
-                stateHome.resolve("install-context.properties"),
-                """
+        Files.writeString(stateHome.resolve("install-context.properties"), """
                 bin_dir=%s
                 codex_npm_prefix=%s
                 workspace_root=%s
-                """
-                        .formatted(binDir, codexNpmPrefix, installedWorkspaceRoot));
+                """.formatted(
+                        binDir, codexNpmPrefix, installedWorkspaceRoot));
         var reporter = new SetupDiagnosticReporter(
                 Map.of("SHELL", shell.toString(), "SYMPHONY_TRELLO_WRAPPER_SHELL", wrapperShell.toString()),
                 new FakeCommandRunner());
@@ -2175,14 +2165,11 @@ final class SetupDiagnosticReporterTest {
         saveSyntheticBoard(configDir, workflow, 19205);
         Path workerLog = new ManagedProcessStore(stateHome).files(workflow).stdoutLog();
         Files.createDirectories(workerLog.getParent());
-        Files.writeString(
-                workerLog,
-                """
+        Files.writeString(workerLog, """
                 INFO (main) workflow=%s outcome=loaded
                 INFO (main) cloned into %s/private client/repo
                 INFO (main) cloned into %s/private client/repo outcome=loaded
-                """
-                        .formatted(workflow, configDir, configDir));
+                """.formatted(workflow, configDir, configDir));
         Map<String, String> environment = Map.of("SYMPHONY_TRELLO_CONFIG_DIR", configDir.toString());
 
         // when
@@ -2217,14 +2204,10 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
         FakeCommandRunner commands = new FakeCommandRunner()
-                .returns(
-                        0,
-                        """
+                .returns(0, """
                         Emulate Docker CLI using podman. Create /etc/containers/nodocker to quiet msg.
                         podman version 6.0.2
-                        """,
-                        docker.toString(),
-                        "--version")
+                        """, docker.toString(), "--version")
                 .returns(0, "codex-cli 1.2.3 at /opt/codex/bin/codex\n", codex.toString(), "--version")
                 .returns(0, "Logged in using ChatGPT\n", codex.toString(), "login", "status");
         Map<String, String> environment = Map.of("PATH", toolDirectory.toString());
@@ -2657,9 +2640,7 @@ final class SetupDiagnosticReporterTest {
         Path workflow = configDir.resolve("WORKFLOW.lookup-secret.md");
         Path secretFile = configDir.resolve(SECRET_DIRECTORY).resolve("trello-api-key");
         Files.createDirectories(configDir);
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -2670,8 +2651,7 @@ final class SetupDiagnosticReporterTest {
                   port: 19204
                 ---
                 # Lookup Secret
-                """
-                        .formatted(secretDirectory));
+                """.formatted(secretDirectory));
         new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "lookup-secret-board-id",
@@ -3026,17 +3006,14 @@ final class SetupDiagnosticReporterTest {
         String githubToken = "ghp_" + "abcdefghijklmnopqrstuvwxyz1234567890abcd";
         String trelloToken = "ATTA" + "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz";
         String openAiToken = "sk-" + "proj-abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz";
-        Files.writeString(
-                stateHome.resolve("fake-secret.log"),
-                """
+        Files.writeString(stateHome.resolve("fake-secret.log"), """
                 github token %s
                 trello key 1234567890abcdef1234567890abcdef
                 trello token %s
                 openai %s
                 password=super-secret-value
                 ordinary 1234567890abcdef1234567890abcdef
-                """
-                        .formatted(githubToken, trelloToken, openAiToken));
+                """.formatted(githubToken, trelloToken, openAiToken));
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -3069,9 +3046,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(workspaceRoot);
         Files.createDirectories(stateHome);
         Files.writeString(configDir.resolve(ConnectedBoardManifest.FILE_NAME), "{\"boards\":[]}");
-        Files.writeString(
-                stateHome.resolve("url-user-info.log"),
-                """
+        Files.writeString(stateHome.resolve("url-user-info.log"), """
                 authority https://user:password@example.invalid/path
                 path-at https://example.invalid/path@outside
                 """);
@@ -3097,14 +3072,11 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(workspaceRoot);
         Files.createDirectories(stateHome);
-        Files.writeString(
-                stateHome.resolve("single-token.log"),
-                """
+        Files.writeString(stateHome.resolve("single-token.log"), """
                 exact %s status=end
                 nested %s/nested/output.txt status=end
                 ref private-ref-value end
-                """
-                        .formatted(configDir, configDir));
+                """.formatted(configDir, configDir));
         var reporter = new SetupDiagnosticReporter(
                 Map.of("SYMPHONY_TRELLO_REF", "private-ref-value"), new FakeCommandRunner());
 
@@ -3137,15 +3109,13 @@ final class SetupDiagnosticReporterTest {
         Files.writeString(existingChild, "");
         Files.createDirectories(workspaceRoot);
         Files.createDirectories(stateHome);
-        Files.writeString(
-                stateHome.resolve("option-space.log"),
-                """
+        Files.writeString(stateHome.resolve("option-space.log"), """
                 cloned into %s/private client/repo
                 kept in %s/client (old) [archived] notes/repo
                 wrote %s outcome=written
                 unstructured %s trailing text
-                """
-                        .formatted(configDir, configDir, existingChild, existingChild));
+                """.formatted(
+                        configDir, configDir, existingChild, existingChild));
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -3335,15 +3305,12 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(stateHome);
         Files.writeString(configDir.resolve(ConnectedBoardManifest.FILE_NAME), "{\"boards\":[]}");
         String trelloToken = "ATTA" + "thisLooksLikeASecretTokenValue1234567890";
-        Files.writeString(
-                stateHome.resolve("parser-secret.log"),
-                """
+        Files.writeString(stateHome.resolve("parser-secret.log"), """
                 Failed to parse workflow front matter
                  api_token: "%s
                  ... sLikeASecretTokenValue1234567890
                 line: 4, column: 14
-                """
-                        .formatted(trelloToken));
+                """.formatted(trelloToken));
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -3370,9 +3337,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(workspaceRoot);
         Files.createDirectories(stateHome);
         Files.writeString(configDir.resolve(ConnectedBoardManifest.FILE_NAME), "{\"boards\":[]}");
-        Files.writeString(
-                stateHome.resolve("fake-fence.log"),
-                """
+        Files.writeString(stateHome.resolve("fake-fence.log"), """
                 before fence
                 ```
                 # injected markdown heading
@@ -3386,9 +3351,7 @@ final class SetupDiagnosticReporterTest {
         String report = renderDefaultDiagnostics(reporter, configDir, workspaceRoot, stateHome);
 
         // then
-        assertThat(report)
-                .contains(
-                        """
+        assertThat(report).contains("""
                         ````text
                         before fence
                         ```
@@ -3397,8 +3360,7 @@ final class SetupDiagnosticReporterTest {
                         ```
                         after fence
                         ````
-                        """)
-                .doesNotContain("\n```text\nbefore fence\n```\n# injected markdown heading\n");
+                        """).doesNotContain("\n```text\nbefore fence\n```\n# injected markdown heading\n");
     }
 
     @Test
@@ -3412,16 +3374,14 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(stateHome);
         Files.writeString(configDir.resolve(ConnectedBoardManifest.FILE_NAME), "{\"boards\":[]}");
         Files.writeString(
-                stateHome.resolve("fake-control.log"),
-                """
+                stateHome.resolve("fake-control.log"), """
                 normal line
                 ansi %1$s[31mred%1$s[0m line
                 osc %1$s]8;;https://example.com%2$sLink%1$s]8;;%2$s line
                 backspace abc\b\bxy
                 formfeed before\fafter
                 carriage before\rafter
-                """
-                        .formatted(ANSI_ESCAPE_IN_LOG, TERMINAL_BELL_IN_LOG));
+                """.formatted(ANSI_ESCAPE_IN_LOG, TERMINAL_BELL_IN_LOG));
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -3481,9 +3441,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(stateHome);
         Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19196));
         ManagedProcessStore.ManagedProcessFiles logs = new ManagedProcessStore(stateHome).files(workflow);
-        Files.writeString(
-                logs.stdoutLog(),
-                """
+        Files.writeString(logs.stdoutLog(), """
 
                 2026-05-29 08:02:26,698 INFO  [app] previous worker event
 
@@ -3552,9 +3510,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(stateHome);
         Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19197));
         ManagedProcessStore.ManagedProcessFiles logs = new ManagedProcessStore(stateHome).files(workflow);
-        Files.writeString(
-                logs.stdoutLog(),
-                """
+        Files.writeString(logs.stdoutLog(), """
                 JVM startup failure before logging initialized
                 java.lang.IllegalStateException: useful pre-log failure
                 2026-05-29 08:02:27,698 INFO  [app] worker started
@@ -3583,9 +3539,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(stateHome);
         Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19198));
         ManagedProcessStore.ManagedProcessFiles logs = new ManagedProcessStore(stateHome).files(workflow);
-        Files.writeString(
-                logs.stdoutLog(),
-                """
+        Files.writeString(logs.stdoutLog(), """
 
                  --/ __ \\/ / / / _ | / _ \\/ //_/ / / / __/
                  -/ /_/ / /_/ / __ |/ , _/ ,< / /_/ /\\ \\
@@ -3688,9 +3642,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
         Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithEnvironmentBackedPort());
-        Files.writeString(
-                configDir.resolve(".env"),
-                """
+        Files.writeString(configDir.resolve(".env"), """
                 BOARD_ID_REF=000000000000000000000002
                 BOARD_STATUS_PORT=19421
                 """);
@@ -3832,11 +3784,13 @@ final class SetupDiagnosticReporterTest {
 
         // then
         assertThat(thrown)
-                .isInstanceOfSatisfying(TrelloBoardSetupException.class, exception -> assertThat(exception)
-                        .extracting(TrelloBoardSetupException::code, Throwable::getMessage)
-                        .containsExactly(
-                                "setup_invalid_arguments",
-                                "Multiple connected boards match --board. Re-run with a board id or short link."))
+                .isInstanceOfSatisfying(
+                        TrelloBoardSetupException.class,
+                        exception -> assertThat(exception)
+                                .extracting(TrelloBoardSetupException::code, Throwable::getMessage)
+                                .containsExactly(
+                                        "setup_invalid_arguments",
+                                        "Multiple connected boards match --board. Re-run with a board id or short link."))
                 .hasMessageContaining("Multiple connected boards match --board")
                 .satisfies(exception -> assertThat(exception.getMessage())
                         .doesNotContain(
@@ -3901,12 +3855,14 @@ final class SetupDiagnosticReporterTest {
 
         // then
         assertThat(thrown)
-                .isInstanceOfSatisfying(TrelloBoardSetupException.class, exception -> assertThat(exception)
-                        .extracting(TrelloBoardSetupException::code, Throwable::getMessage)
-                        .containsExactly(
-                                "setup_invalid_arguments",
-                                "Multiple connected-board rows reference --workflow. Repair "
-                                        + ConnectedBoardManifest.FILE_NAME + ", then rerun the command."))
+                .isInstanceOfSatisfying(
+                        TrelloBoardSetupException.class,
+                        exception -> assertThat(exception)
+                                .extracting(TrelloBoardSetupException::code, Throwable::getMessage)
+                                .containsExactly(
+                                        "setup_invalid_arguments",
+                                        "Multiple connected-board rows reference --workflow. Repair "
+                                                + ConnectedBoardManifest.FILE_NAME + ", then rerun the command."))
                 .hasMessageContaining("Multiple connected-board rows reference --workflow")
                 .satisfies(exception -> assertThat(exception.getMessage())
                         .doesNotContain(
@@ -3950,9 +3906,13 @@ final class SetupDiagnosticReporterTest {
                         Optional.of(workflow))));
 
         // then
-        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, exception -> assertThat(exception)
-                .extracting(TrelloBoardSetupException::code, Throwable::getMessage)
-                .containsExactly("setup_invalid_arguments", "--board and --workflow cannot be used together."));
+        assertThat(thrown)
+                .isInstanceOfSatisfying(
+                        TrelloBoardSetupException.class,
+                        exception -> assertThat(exception)
+                                .extracting(TrelloBoardSetupException::code, Throwable::getMessage)
+                                .containsExactly(
+                                        "setup_invalid_arguments", "--board and --workflow cannot be used together."));
         assertThat(configDir.resolve(DiagnosticsTokenHasher.KEY_FILE_NAME)).doesNotExist();
     }
 
@@ -4037,9 +3997,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(stateHome);
         Files.writeString(empty, "");
         Files.writeString(noFrontMatter, "Body only\n");
-        Files.writeString(
-                invalidPort,
-                """
+        Files.writeString(invalidPort, """
                 ---
                 tracker:
                   board_id: "private-board-id"
@@ -4060,23 +4018,24 @@ final class SetupDiagnosticReporterTest {
                 .toList();
 
         // then
-        assertThat(thrown).allSatisfy(exception -> assertThat(exception)
-                .isInstanceOfSatisfying(
-                        TrelloBoardSetupException.class,
-                        setupException -> assertThat(setupException)
-                                .extracting(TrelloBoardSetupException::code, Throwable::getMessage)
-                                .containsExactly(
-                                        "setup_invalid_arguments",
-                                        "--workflow must reference a readable workflow file with usable workflow front matter."))
-                .satisfies(error -> assertThat(error.getMessage())
-                        .doesNotContain(
-                                tempDir.toString(),
-                                configDir.toString(),
-                                directory.toString(),
-                                missing.toString(),
-                                empty.toString(),
-                                noFrontMatter.toString(),
-                                "private-board-id")));
+        assertThat(thrown)
+                .allSatisfy(exception -> assertThat(exception)
+                        .isInstanceOfSatisfying(
+                                TrelloBoardSetupException.class,
+                                setupException -> assertThat(setupException)
+                                        .extracting(TrelloBoardSetupException::code, Throwable::getMessage)
+                                        .containsExactly(
+                                                "setup_invalid_arguments",
+                                                "--workflow must reference a readable workflow file with usable workflow front matter."))
+                        .satisfies(error -> assertThat(error.getMessage())
+                                .doesNotContain(
+                                        tempDir.toString(),
+                                        configDir.toString(),
+                                        directory.toString(),
+                                        missing.toString(),
+                                        empty.toString(),
+                                        noFrontMatter.toString(),
+                                        "private-board-id")));
         String invalidPortReport =
                 renderWorkflowDiagnostics(reporter, configDir, workspaceRoot, stateHome, invalidPort);
         assertThat(invalidPortReport).contains("invalid server.port");
@@ -4098,8 +4057,7 @@ final class SetupDiagnosticReporterTest {
             Files.createDirectories(stateHome);
             Path workflow = configDir.resolve("WORKFLOW.private-board.md");
             Path env = configDir.resolve(".env");
-            String workflowContent =
-                    """
+            String workflowContent = """
                     ---
                     tracker:
                       board_id: "private-board-id"
@@ -4117,8 +4075,7 @@ final class SetupDiagnosticReporterTest {
                         - "/home/alice/private-project"
                     ---
                     Body
-                    """
-                            .formatted(port);
+                    """.formatted(port);
             Files.writeString(workflow, workflowContent);
             new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                     .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
@@ -4133,9 +4090,7 @@ final class SetupDiagnosticReporterTest {
                             true,
                             List.of(tempDir.resolve("private-project")),
                             false))));
-            Files.writeString(
-                    stateHome.resolve("WORKFLOW.private-board.md.abc.err"),
-                    """
+            Files.writeString(stateHome.resolve("WORKFLOW.private-board.md.abc.err"), """
                     token=secret-value
                     "api_token":"json-secret"
                     Authorization: Bearer bearer-secret
@@ -4162,17 +4117,14 @@ final class SetupDiagnosticReporterTest {
                     card_identifier=TRELLO-private-short
                     {"cardId":"private-json-card-id","cardIdentifier":"TRELLO-private-json"}
                     nested parent path %s
-                    """
-                            .formatted(appHome.resolve("Secret Client").resolve("repo")));
-            Files.writeString(
-                    stateHome.resolve("install-context.properties"),
-                    """
+                    """.formatted(
+                            appHome.resolve("Secret Client").resolve("repo")));
+            Files.writeString(stateHome.resolve("install-context.properties"), """
                     repo_url=git@github.com:private/repo.git
                     ref=feature/private-ref
                     source_commit=%s
                     TRELLO_TOKEN=secret-value
-                    """
-                            .formatted(privateSourceCommit));
+                    """.formatted(privateSourceCommit));
             Files.writeString(stateHome.resolve("large.log"), largeLog());
             Path toolDirectory = fakeToolDirectory(tempDir, "git", "codex");
             FakeCommandRunner commands = new FakeCommandRunner()
@@ -4312,9 +4264,7 @@ final class SetupDiagnosticReporterTest {
         new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of()));
         Path privateContext = tempDir.resolve("private-context.txt");
-        Files.writeString(
-                privateContext,
-                """
+        Files.writeString(privateContext, """
                 PRIVATE_INSTALL_CONTEXT_MARKER_SHOULD_NOT_APPEAR
                 secret_token=abc123
                 """);
@@ -4377,18 +4327,19 @@ final class SetupDiagnosticReporterTest {
                 failure, request(configDir, workspaceRoot, manifest, workflow, env), new RecordingTerminal());
 
         // then
-        assertThat(report).hasValueSatisfying(path -> assertThat(path)
-                .content(StandardCharsets.UTF_8)
-                .contains(
-                        "error_code:** setup_start_failed",
-                        "(IOException: Cannot run program \"\\<path:",
-                        "error=13, Permission denied)")
-                .doesNotContain(
-                        "Private Cause Board",
-                        "000000000000000000000001",
-                        "SYNTH001",
-                        privateJava.toString(),
-                        tempDir.toString()));
+        assertThat(report)
+                .hasValueSatisfying(path -> assertThat(path)
+                        .content(StandardCharsets.UTF_8)
+                        .contains(
+                                "error_code:** setup_start_failed",
+                                "(IOException: Cannot run program \"\\<path:",
+                                "error=13, Permission denied)")
+                        .doesNotContain(
+                                "Private Cause Board",
+                                "000000000000000000000001",
+                                "SYNTH001",
+                                privateJava.toString(),
+                                tempDir.toString()));
     }
 
     @Test
@@ -4430,9 +4381,7 @@ final class SetupDiagnosticReporterTest {
         Path workflow = configDir.resolve("WORKFLOW.request.md");
         Path env = configDir.resolve(".env");
         Files.createDirectories(configDir);
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   board_id: "request-board-id"
@@ -4577,9 +4526,10 @@ final class SetupDiagnosticReporterTest {
                 terminal);
 
         // then
-        assertThat(report).hasValueSatisfying(path -> assertThat(path)
-                .content(StandardCharsets.UTF_8)
-                .contains("## Workflow Summary", "## Local Health Probes", "No configured local ports found."));
+        assertThat(report)
+                .hasValueSatisfying(path -> assertThat(path)
+                        .content(StandardCharsets.UTF_8)
+                        .contains("## Workflow Summary", "## Local Health Probes", "No configured local ports found."));
         assertThat(terminal.stderr()).contains("Troubleshooting report written:");
     }
 
@@ -4595,9 +4545,7 @@ final class SetupDiagnosticReporterTest {
             Path workflow = tempDir.resolve("custom-board.md");
             Path env = configDir.resolve(".env");
             Files.createDirectories(configDir);
-            Files.writeString(
-                    workflow,
-                    """
+            Files.writeString(workflow, """
                     ---
                     tracker:
                       board_id: "custom-board-id"
@@ -4605,8 +4553,7 @@ final class SetupDiagnosticReporterTest {
                       port: %d
                     ---
                     Body
-                    """
-                            .formatted(port));
+                    """.formatted(port));
             var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
             var terminal = new RecordingTerminal();
 
@@ -4618,10 +4565,11 @@ final class SetupDiagnosticReporterTest {
         }
 
         // then
-        assertThat(report).hasValueSatisfying(path -> assertThat(path)
-                .content(StandardCharsets.UTF_8)
-                .contains("http://127.0.0.1:" + port + "/api/v1/local-status")
-                .doesNotContain("No configured local ports found."));
+        assertThat(report)
+                .hasValueSatisfying(path -> assertThat(path)
+                        .content(StandardCharsets.UTF_8)
+                        .contains("http://127.0.0.1:" + port + "/api/v1/local-status")
+                        .doesNotContain("No configured local ports found."));
     }
 
     @Test
@@ -4648,10 +4596,11 @@ final class SetupDiagnosticReporterTest {
                             relativeWorkflow.toString()));
 
             // then
-            assertThat(report).hasValueSatisfying(path -> assertThat(path)
-                    .content(StandardCharsets.UTF_8)
-                    .contains("http://127.0.0.1:19192/api/v1/local-status")
-                    .doesNotContain("No configured local ports found."));
+            assertThat(report)
+                    .hasValueSatisfying(path -> assertThat(path)
+                            .content(StandardCharsets.UTF_8)
+                            .contains("http://127.0.0.1:19192/api/v1/local-status")
+                            .doesNotContain("No configured local ports found."));
         } finally {
             Files.deleteIfExists(relativeWorkflow);
         }
@@ -4672,10 +4621,11 @@ final class SetupDiagnosticReporterTest {
                 List.of("setup-local", "--config-dir", configDir.toString(), "--workflow", "custom.md"));
 
         // then
-        assertThat(report).hasValueSatisfying(path -> assertThat(path)
-                .content(StandardCharsets.UTF_8)
-                .contains("http://127.0.0.1:19193/api/v1/local-status")
-                .doesNotContain("No configured local ports found."));
+        assertThat(report)
+                .hasValueSatisfying(path -> assertThat(path)
+                        .content(StandardCharsets.UTF_8)
+                        .contains("http://127.0.0.1:19193/api/v1/local-status")
+                        .doesNotContain("No configured local ports found."));
     }
 
     @Test
@@ -4687,16 +4637,13 @@ final class SetupDiagnosticReporterTest {
         Path workflow = configDir.resolve("WORKFLOW.missing.md");
         Path env = configDir.resolve(".env");
         Files.createDirectories(configDir);
-        Files.writeString(
-                configDir.resolve("notes.md"),
-                """
+        Files.writeString(configDir.resolve("notes.md"), """
                 ---
                 server:
                   port: %d
                 ---
                 Notes, not a Symphony workflow.
-                """
-                        .formatted(notesPort));
+                """.formatted(notesPort));
         var reporter = new SetupDiagnosticReporter(
                 Map.of(), new FakeCommandRunner(), Files::list, clockWithPortInTimeUtc(notesPort));
         var terminal = new RecordingTerminal();
@@ -4708,10 +4655,11 @@ final class SetupDiagnosticReporterTest {
                 terminal);
 
         // then
-        assertThat(report).hasValueSatisfying(path -> assertThat(path)
-                .content(StandardCharsets.UTF_8)
-                .contains("No configured local ports found.")
-                .doesNotContain(renderedPortForms(notesPort)));
+        assertThat(report)
+                .hasValueSatisfying(path -> assertThat(path)
+                        .content(StandardCharsets.UTF_8)
+                        .contains("No configured local ports found.")
+                        .doesNotContain(renderedPortForms(notesPort)));
     }
 
     @ParameterizedTest
@@ -4751,9 +4699,7 @@ final class SetupDiagnosticReporterTest {
         Path validWorkflow = configDir.resolve("WORKFLOW.no-tracker.md");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(
-                invalidWorkflow,
-                """
+        Files.writeString(invalidWorkflow, """
                 ---
                 tracker:
                   kind: trello
@@ -4762,8 +4708,7 @@ final class SetupDiagnosticReporterTest {
                   port: %s
                 ---
                 Body
-                """
-                        .formatted(invalidPortValue));
+                """.formatted(invalidPortValue));
         Files.writeString(validWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(20999));
         // The fixed clock keeps the rendered time_utc line free of every invalidPortValue substring;
         // the system clock makes "-1" match dates such as 2026-06-10.
@@ -5029,18 +4974,10 @@ final class SetupDiagnosticReporterTest {
 
         static FakeLocalServer start() throws IOException {
             HttpServer server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
-            server.createContext(
-                    "/api/v1/local-status",
-                    exchange -> writeJson(
-                            exchange,
-                            """
+            server.createContext("/api/v1/local-status", exchange -> writeJson(exchange, """
                     {"boardId":"private-board-id","configuredBoardId":"older-private-short-link","workflowPath":"/home/alice/private-project/WORKFLOW.md"}
                     """));
-            server.createContext(
-                    "/api/v1/state",
-                    exchange -> writeJson(
-                            exchange,
-                            """
+            server.createContext("/api/v1/state", exchange -> writeJson(exchange, """
                     {
                       "generated_at":"2026-05-11T00:00:00Z",
                       "counts":{"running":1,"retrying":1},
@@ -5121,9 +5058,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
         Files.createDirectories(workflowDir);
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -5186,9 +5121,9 @@ final class SetupDiagnosticReporterTest {
 
         // when
         String report;
-        try (var ignored =
-                mockConstruction(ManagedProcessStore.class, (store, context) -> when(store.recordedWorkflowPaths())
-                        .thenThrow(failure))) {
+        try (var ignored = mockConstruction(
+                ManagedProcessStore.class,
+                (store, context) -> when(store.recordedWorkflowPaths()).thenThrow(failure))) {
             report = reporter.renderReport(request, true);
         }
 

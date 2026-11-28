@@ -701,10 +701,11 @@ final class HeartbeatReporterTest {
         verify(client).capture(body.capture());
 
         // then
-        assertThat(output).anySatisfy(line -> assertThat(line)
-                .contains("telemetry request POST " + TelemetryFixture.LOOPBACK_ENDPOINT)
-                .contains("User-Agent")
-                .contains(body.getValue()));
+        assertThat(output)
+                .anySatisfy(line -> assertThat(line)
+                        .contains("telemetry request POST " + TelemetryFixture.LOOPBACK_ENDPOINT)
+                        .contains("User-Agent")
+                        .contains(body.getValue()));
         assertThat(output).anySatisfy(line -> assertThat(line).contains("telemetry response accepted status=200"));
     }
 

@@ -27,15 +27,14 @@ final class WorkspaceAccessFlowTest {
         // given
         LocalSetup.Options options = SetupOptionFactory.options(tempDir);
         var terminal = new RecordingTerminal("y", input, "n");
-        Path expected =
-                switch (name) {
-                    case "home" -> Path.of(System.getProperty("user.home"));
-                    case "home with Windows separator" ->
-                        Path.of(System.getProperty("user.home")).resolve("project");
-                    case "relative" -> tempDir.resolve("project");
-                    case "absolute" -> Path.of("/tmp/symphony-test");
-                    default -> throw new IllegalArgumentException(name);
-                };
+        Path expected = switch (name) {
+            case "home" -> Path.of(System.getProperty("user.home"));
+            case "home with Windows separator" ->
+                Path.of(System.getProperty("user.home")).resolve("project");
+            case "relative" -> tempDir.resolve("project");
+            case "absolute" -> Path.of("/tmp/symphony-test");
+            default -> throw new IllegalArgumentException(name);
+        };
 
         // when
         List<Path> paths = new WorkspaceAccessFlow().resolve(options, terminal);

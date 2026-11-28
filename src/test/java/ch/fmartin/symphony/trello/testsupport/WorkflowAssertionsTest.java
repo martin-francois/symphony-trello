@@ -22,9 +22,7 @@ final class WorkflowAssertionsTest {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
         Path root = Path.of("shared");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 workspace:
                   root: shared
@@ -46,14 +44,11 @@ final class WorkflowAssertionsTest {
     void writableRootsAreParsedRegardlessOfYamlLayout(String codexYaml) throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 codex: %s
                 ---
-                """
-                        .formatted(codexYaml));
+                """.formatted(codexYaml));
 
         Path root = Path.of("shared folder");
 
