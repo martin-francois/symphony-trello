@@ -25,5 +25,5 @@ GitHub mode needs one more Trello list:
   Merging
 
   OK  GitHub workflow enabled for "Snapshot Queue"
-          Restart: symphony-trello start --env <TEMP>/config/.env --workflow <TEMP>/config/WORKFLOW.md
+          Restart: symphony-trello start --env '<TEMP>/config/.env' --workflow '<TEMP>/config/WORKFLOW.md'
 --- stderr ---

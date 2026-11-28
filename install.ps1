@@ -1016,7 +1016,8 @@ function Test-AutostartEnvironmentName([string]$Name) {
   if ($Name -eq $InstallerCompletionEnvironmentName) {
     return $false
   }
-  return $Name.StartsWith("TRELLO_") -or
+  return $Name -eq "PATH" -or $Name -eq "JAVA_HOME" -or
+    $Name.StartsWith("TRELLO_") -or
     $Name.StartsWith("SYMPHONY_") -or
     $Name.StartsWith("CODEX_") -or
     $Name.StartsWith("GITHUB_") -or
@@ -1024,6 +1025,18 @@ function Test-AutostartEnvironmentName([string]$Name) {
     $Name.StartsWith("OPENAI_") -or
     $Name.StartsWith("ANTHROPIC_") -or
     $Name.StartsWith("QUARKUS_")
+}
+
+function Write-PowerShellScript {
+  param(
+    [Parameter(Mandatory = $true)][string]$Path,
+    [Parameter(Mandatory = $true, ValueFromPipeline = $true)][string]$Content
+  )
+  process {
+    # Windows PowerShell 5 reads BOM-less UTF-8 as ANSI, corrupting non-ASCII paths.
+    $nativePath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
+    [System.IO.File]::WriteAllText($nativePath, $Content, [System.Text.UTF8Encoding]::new($true))
+  }
 }
 
 function Write-AutostartEnvironmentFile {
@@ -1034,7 +1047,7 @@ function Write-AutostartEnvironmentFile {
   New-Item -ItemType Directory -Force -Path $ConfigDir | Out-Null
   $lines = @(
     "# Installer-managed Symphony for Trello autostart environment.",
-    "# Contains only prefixed runtime variables from the installer session."
+    "# Contains selected runtime variables and the validated toolchain search environment."
   )
   Get-ChildItem Env: |
     Sort-Object Name |
@@ -1046,7 +1059,7 @@ function Write-AutostartEnvironmentFile {
     ForEach-Object {
       $lines += "`$env:$($_.Name) = $(ConvertTo-PowerShellLiteral $_.Value)"
     }
-  $lines | Set-Content -Encoding UTF8 -Path $AutostartEnvironmentPath
+  ($lines -join [Environment]::NewLine) | Write-PowerShellScript -Path $AutostartEnvironmentPath
   Protect-PrivateFile $AutostartEnvironmentPath
 }
 
@@ -1075,11 +1088,14 @@ if (Test-Path -LiteralPath $environmentPathLiteral) {
 }
 & $wrapperLiteral start --all
 exit `$LASTEXITCODE
-"@ | Set-Content -Encoding UTF8 -Path $AutostartScriptPath
+"@ | Write-PowerShellScript -Path $AutostartScriptPath
 }
 
 function Get-StartAllCommand {
-  return "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$AutostartScriptPath`""
+  $launcher = ConvertTo-PowerShellLiteral $AutostartScriptPath
+  $command = "& $launcher; exit `$LASTEXITCODE"
+  $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
+  return "powershell.exe -NoProfile -ExecutionPolicy Bypass -EncodedCommand $encoded"
 }
 
 function Install-StartupFolderCommand {
@@ -1123,37 +1139,25 @@ function Enable-WindowsAutostart {
   Write-AutostartLauncher
   if ($DryRun) {
     Write-Status "WOULD" " create Windows Scheduled Task: $ScheduledTaskName"
-    Write-Status "WOULD" " start managed workers through Windows Scheduled Task"
     return $true
   }
   $createResult = Install-ScheduledTaskAutostart
   if ([string]::IsNullOrWhiteSpace($createResult)) {
     Write-Status "OK" "  Windows Scheduled Task installed: $ScheduledTaskName"
-    try {
-      Start-ScheduledTask -TaskName $ScheduledTaskName
-      Write-Status "OK" "  Windows Scheduled Task started managed workers."
-      return $true
-    } catch {
-      Write-Status "NOTE" "  Scheduled Task was installed but could not be started immediately. It will run at the next user logon."
-      Invoke-Step "$BinDir\symphony-trello.ps1 start --all" { & "$BinDir\symphony-trello.ps1" start --all }
-      Write-Status "OK" "  Managed workers started"
-      return $true
-    }
-  }
-  Write-Status "NOTE" "  Could not create Windows Scheduled Task: $createResult"
-  if (Install-StartupFolderCommand) {
-    Invoke-Step "$BinDir\symphony-trello.ps1 start --all" { & "$BinDir\symphony-trello.ps1" start --all }
-    Write-Status "OK" "  Managed workers started"
     return $true
   }
-  return $false
+  Write-Status "NOTE" "  Could not create Windows Scheduled Task: $createResult"
+  return Install-StartupFolderCommand
 }
 
 function Start-ManagedWorkers {
-  if (Enable-WindowsAutostart) {
+  if (-not (Enable-WindowsAutostart)) {
+    Write-Status "NOTE" "  Autostart was not configured. After reboot or login, run: $InstalledCommand start --all"
+  }
+  if ($DryRun) {
+    Write-Status "WOULD" " run: $BinDir\symphony-trello.ps1 start --all"
     return
   }
-  Write-Status "NOTE" "  Autostart was not configured. After reboot or login, run: $InstalledCommand start --all"
   Invoke-Step "$BinDir\symphony-trello.ps1 start --all" { & "$BinDir\symphony-trello.ps1" start --all }
   Write-Status "OK" "  Managed workers started"
 }
@@ -1270,12 +1274,128 @@ function Enable-ManagedCodexPath {
   }
 }
 
-function Get-ManagedPidFile {
-  if (-not (Test-Path -LiteralPath $StateHome -PathType Container)) {
-    return $null
+function Test-LegacyPidOwnership([string]$PidPath) {
+  $managedPid = 0
+  if (-not [int]::TryParse(([IO.File]::ReadAllText($PidPath)).Trim(), [ref]$managedPid) -or $managedPid -le 0) {
+    return $true
   }
-  return Get-ChildItem -LiteralPath $StateHome -Filter "*.pid" -File -ErrorAction SilentlyContinue |
-    Select-Object -First 1
+  if (-not (Get-Process -Id $managedPid -ErrorAction SilentlyContinue)) {
+    return $true
+  }
+  # Non-Windows parity tests cannot inspect Win32 command lines. Preserve live records there.
+  if (-not (Test-WindowsPlatform)) {
+    return $false
+  }
+  $process = Get-CimInstance Win32_Process -Filter "ProcessId = $managedPid" -ErrorAction Stop
+  if (-not $process -or -not $process.CommandLine) {
+    return $false
+  }
+  $marker = [regex]::Escape("-Dsymphony.trello.managed.app_home=$Prefix")
+  $jar = [regex]::Escape((Join-Path $Prefix "target\quarkus-app\quarkus-run.jar"))
+  if (-not (($process.CommandLine -match "(^|\s)`"?$marker`"?(\s|$)") -and
+      ($process.CommandLine -match "(^|\s)`"?$jar`"?(\s|$)"))) {
+    return $false
+  }
+  # A shared application prefix does not establish which configuration will restart this worker.
+  $manifestPath = Join-Path $ConfigDir $ConnectedBoardsFileName
+  if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
+    $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json -ErrorAction Stop
+    foreach ($board in $manifest.boards) {
+      if (-not [string]::IsNullOrWhiteSpace($board.workflowPath)) {
+        # Java retains the recorded spelling; GetFullPath expands Windows short names.
+        foreach ($candidate in @($board.workflowPath, [IO.Path]::GetFullPath($board.workflowPath))) {
+          $workflow = [regex]::Escape($candidate.Replace('/', '\'))
+          if ($process.CommandLine -match "(^|\s)`"?$workflow`"?(\s|$)") {
+            return $true
+          }
+        }
+      }
+    }
+  }
+  throw "cannot migrate managed worker state: a live worker is outside the selected configuration; stop it through its own configuration before retrying"
+}
+
+function Get-ManagedPidFiles([string]$StateRoot) {
+  if (-not (Test-Path -LiteralPath $StateRoot -PathType Container)) {
+    return @()
+  }
+  $privateState = [IO.Path]::GetFullPath($StateRoot).Equals(
+    [IO.Path]::GetFullPath($StateHome), [System.StringComparison]::OrdinalIgnoreCase)
+  return @(Get-ChildItem -LiteralPath $StateRoot -Filter "*.pid" -File -ErrorAction SilentlyContinue |
+    Where-Object {
+      $privateState -or ($_.Name -cmatch '^.+\.[0-9a-f]{12}\.pid$' -and (Test-LegacyPidOwnership $_.FullName))
+    })
+}
+
+function Get-ManagedPidFile([string]$StateRoot) {
+  return Get-ManagedPidFiles $StateRoot | Select-Object -First 1
+}
+
+# Old commands enumerate every PID file without connected boards. Give them only managed records.
+function Stop-LegacyManagedWorkers([string]$StateRoot) {
+  $temporaryRoot = Join-Path ([IO.Path]::GetTempPath()) ([System.Guid]::NewGuid().ToString("N"))
+  $temporaryConfig = Join-Path $temporaryRoot "config"
+  $temporaryState = Join-Path $temporaryRoot "state"
+  $originals = @{}
+  try {
+    New-Item -ItemType Directory -Path $temporaryConfig, $temporaryState | Out-Null
+    foreach ($pidFile in Get-ManagedPidFiles $StateRoot) {
+      $originals[$pidFile.FullName] = [IO.File]::ReadAllBytes($pidFile.FullName)
+      [IO.File]::WriteAllBytes((Join-Path $temporaryState $pidFile.Name), $originals[$pidFile.FullName])
+    }
+    Invoke-Step "$BinDir\symphony-trello.ps1 stop legacy managed workers" {
+      & "$BinDir\symphony-trello.ps1" stop --config-dir $temporaryConfig --state-home $temporaryState
+    }
+    foreach ($original in $originals.Keys) {
+      $remaining = Join-Path $temporaryState ([IO.Path]::GetFileName($original))
+      $unchanged = (Test-Path -LiteralPath $original -PathType Leaf) -and
+        [Convert]::ToBase64String([IO.File]::ReadAllBytes($original)) -ceq
+        [Convert]::ToBase64String($originals[$original])
+      if ((Test-Path -LiteralPath $remaining) -or -not $unchanged) {
+        throw "cannot migrate managed worker state: stop left a PID record or its original changed; inspect the legacy state directory before retrying"
+      }
+      Remove-Item -LiteralPath $original -Force
+    }
+  } finally {
+    if (Test-Path -LiteralPath $temporaryRoot) {
+      Remove-Item -LiteralPath $temporaryRoot -Recurse -Force
+    }
+  }
+}
+
+function Stop-ManagedWorkersInRoot([string]$StateRoot) {
+  if ([IO.Path]::GetFullPath($StateRoot).Equals(
+      [IO.Path]::GetFullPath($StateHome), [System.StringComparison]::OrdinalIgnoreCase)) {
+    Invoke-Step "$BinDir\symphony-trello.ps1 stop --state-home $StateRoot" {
+      & "$BinDir\symphony-trello.ps1" stop --state-home $StateRoot
+    }
+  } else {
+    Stop-LegacyManagedWorkers $StateRoot
+  }
+}
+
+# Prompts and downloads since the plan check give another configuration time to start a worker, so
+# every root's ownership is checked again before any worker stops.
+function Stop-ManagedWorkersForUpdate([string[]]$StateRoots) {
+  foreach ($stateRoot in $StateRoots) {
+    [void](Get-ManagedPidFiles $stateRoot)
+  }
+  foreach ($stateRoot in $StateRoots) {
+    Stop-ManagedWorkersInRoot $stateRoot
+  }
+}
+
+function Get-ManagedStateRootsWithPid {
+  $roots = @()
+  if (Get-ManagedPidFile $StateHome) {
+    $roots += $StateHome
+  }
+  $legacyStateHome = Join-Path (Split-Path -Parent $ConfigDir) "state"
+  if (-not $legacyStateHome.Equals($StateHome, [System.StringComparison]::OrdinalIgnoreCase) -and
+      (Get-ManagedPidFile $legacyStateHome)) {
+    $roots += $legacyStateHome
+  }
+  return $roots
 }
 
 function ConvertTo-PowerShellLiteral([string]$Value) {
@@ -1386,14 +1506,10 @@ function Install-CodexWithUserLocalNpm {
   Invoke-Step "make Codex CLI available from $BinDir" {
     New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
     $codexNpmPrefixLiteral = ConvertTo-PowerShellLiteral $CodexNpmPrefix
+    $codexNpmPrefixBase64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($CodexNpmPrefix))
     @"
 @echo off
-set "CODEX_NPM_PREFIX=$CodexNpmPrefix"
-if exist "%CODEX_NPM_PREFIX%\codex.cmd" (
-  call "%CODEX_NPM_PREFIX%\codex.cmd" %*
-) else (
-  call "%CODEX_NPM_PREFIX%\bin\codex.cmd" %*
-)
+node -e "const p=require('node:path');const root=p.join(Buffer.from('$codexNpmPrefixBase64','base64').toString('utf8'),'node_modules','@openai','codex');const bin=require(p.join(root,'package.json')).bin;const entry=p.resolve(root,typeof bin==='string'?bin:bin.codex);process.argv.splice(1,0,entry);import(require('node:url').pathToFileURL(entry).href);" -- %*
 "@ | Set-Content -Encoding ASCII (Join-Path $BinDir "codex.cmd")
     @"
 `$CodexNpmPrefix = $codexNpmPrefixLiteral
@@ -1403,7 +1519,7 @@ if (-not (Test-Path `$CodexCommand)) {
 }
 & `$CodexCommand @args
 exit `$LASTEXITCODE
-"@ | Set-Content -Encoding UTF8 (Join-Path $BinDir "codex.ps1")
+"@ | Write-PowerShellScript -Path (Join-Path $BinDir "codex.ps1")
   }
   $env:PATH = "$BinDir;$CodexNpmPrefix;$CodexNpmPrefix\bin;$env:PATH"
 }
@@ -1982,7 +2098,8 @@ function Install-ReleaseArchive {
 
 Enable-ManagedCodexPath
 $UpdatingExistingApp = Test-Path -LiteralPath $Prefix
-$RestartManagedWorkers = [bool]($UpdatingExistingApp -and (Get-ManagedPidFile))
+$ManagedStateRoots = if ($UpdatingExistingApp) { @(Get-ManagedStateRootsWithPid) } else { @() }
+$RestartManagedWorkers = $ManagedStateRoots.Count -gt 0
 if ($UpdatingExistingApp) {
   $PlanTitle = "Update plan"
   $AppPhaseTitle = "Updating Symphony"
@@ -2134,7 +2251,8 @@ if ($InstallSource -eq "source-checkout") {
 }
 Assert-NoMajorDowngrade
 if ($RestartManagedWorkers) {
-  Invoke-Step "$BinDir\symphony-trello.ps1 stop" { & "$BinDir\symphony-trello.ps1" stop }
+  # Temporary state-root migration tracked by https://github.com/martin-francois/symphony-trello/issues/678.
+  Stop-ManagedWorkersForUpdate $ManagedStateRoots
   Write-Status "OK" "  Managed workers stopped for the update"
 }
 if ($InstallSource -eq "source-checkout") {
@@ -2212,7 +2330,7 @@ function Invoke-SetupCli {
   exit `$LASTEXITCODE
 }
 Invoke-SetupCli `$ScriptArgs
-"@ | Set-Content -Encoding UTF8 "$BinDir\symphony-trello.ps1"
+"@ | Write-PowerShellScript -Path "$BinDir\symphony-trello.ps1"
 @"
 @echo off
 set "SYMPHONY_TRELLO_WRAPPER_SHELL=cmd"

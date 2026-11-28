@@ -930,8 +930,13 @@ configuration intact. Dry-run, `--no-onboard` and non-interactive runs do not as
 Setup saves Trello credentials that you type or pass directly. If credentials already come from real
 environment variables or an existing `.env` file, setup uses them without copying them into another
 file for setup. For managed autostart, the installer writes a private autostart environment snapshot
-with only Symphony/Trello/Codex/GitHub/OpenAI/Anthropic/Quarkus-prefixed variables from the installer
-session, then removes that snapshot during uninstall.
+with Symphony/Trello/Codex/GitHub/OpenAI/Anthropic/Quarkus-prefixed variables from the installer
+session, then removes that snapshot during uninstall. Windows also preserves `PATH` and `JAVA_HOME`
+so scheduled tasks use the validated toolchain. Install and update start workers directly before
+returning; the scheduled task starts them at future logins. Rerun the installer after changing
+toolchain locations. A Windows update refuses migration when another configuration has a live worker
+sharing the application and legacy state directory. Stop that worker through its own configuration,
+then retry the update.
 
 On normal Linux, macOS, and WSL2 installs, Symphony uses XDG-style user-local paths by default:
 config in `$HOME/.config/symphony-trello`, app and workspaces in
@@ -946,6 +951,18 @@ mutable filesystem. If so, it stores Symphony's app, config, workspaces, state, 
 installer keeps the normal logical XDG paths under `$HOME`. Explicit path overrides such as
 `SYMPHONY_HOME`, `SYMPHONY_TRELLO_CONFIG_DIR`, `SYMPHONY_TRELLO_WORKSPACE_ROOT`,
 `SYMPHONY_TRELLO_STATE_HOME`, `--prefix`, and `--bin-dir` still win.
+
+For a direct advanced setup, `symphony-trello setup-local --state-home PATH` selects the directory
+that stores managed worker PID files and logs. Installer-managed setup supplies this option from the
+chosen install layout, so normal users do not need to set it or remember it for later commands.
+A direct command override does not change the installed default. Repeat `--state-home PATH` for
+later lifecycle commands that use that custom root, or select the state home during installation.
+
+Updates temporarily recognize managed workers whose PID files were written to the former
+config-sibling `state` directory. The updater stops those workers and restarts them in the configured
+state home; existing log files remain where they were as history. This migration is tracked in
+[issue #678](https://github.com/martin-francois/symphony-trello/issues/678) and will be reconsidered
+by August 30, 2027, or at the next breaking release, whichever comes first.
 
 The installer writes an install context in the selected config and state directories, plus stable
 default context locations under `$HOME`, so future updates and uninstall can find the selected paths

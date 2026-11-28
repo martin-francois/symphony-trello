@@ -2701,6 +2701,26 @@ final class LocalWorkerManagerTest {
     }
 
     @Test
+    void stopWithoutConnectedBoardsPreservesForeignStateFiles() throws Exception {
+        // given
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
+        Files.createDirectories(fixture.paths.stateHome());
+        Path foreignPid = fixture.paths.stateHome().resolve("other-app.pid");
+        Path foreignLog = fixture.paths.stateHome().resolve("other-app.log");
+        Files.writeString(foreignPid, "42\n");
+        Files.writeString(foreignLog, "unrelated log\n");
+
+        // when
+        WorkerRunResult result = fixture.stop(fixture.stopAllRequest());
+
+        // then
+        result.assertSuccess();
+        assertThat(foreignPid).content().isEqualTo("42\n");
+        assertThat(foreignLog).content().isEqualTo("unrelated log\n");
+        verify(fixture.platform, never()).stop(anyLong(), any(Duration.class), any(Duration.class));
+    }
+
+    @Test
     void startWithoutSelectorLaunchesEveryConnectedBoard() throws Exception {
         // given
         var fixture = new LocalWorkerManagerTestFixture(tempDir);

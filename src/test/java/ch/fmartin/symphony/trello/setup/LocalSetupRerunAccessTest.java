@@ -119,7 +119,7 @@ final class LocalSetupRerunAccessTest extends LocalSetupFixtureSupport {
 
         // then
         firstResult.assertSuccess();
-        result.assertSuccess().stdoutContains("Restart skipped.", "symphony-trello stop --workflow " + workflow);
+        result.assertSuccess().stdoutContains("Restart skipped.", "symphony-trello stop --workflow '" + workflow + "'");
         assertThatWorkflow(workflow).hasAdditionalWritableRoot(allowedPath);
         assertThat(commands.stoppedWorkflows).isEmpty();
         assertThat(commands.startedWorkflows).isEmpty();

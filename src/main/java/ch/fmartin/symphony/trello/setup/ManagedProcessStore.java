@@ -11,8 +11,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 final class ManagedProcessStore {
+    private static final int STATE_NAME_HASH_LENGTH = 12;
+    private static final Pattern MANAGED_STATE_NAME =
+            Pattern.compile(".+\\.[0-9a-f]{" + STATE_NAME_HASH_LENGTH + "}\\.(?:pid|workflow)");
     private static final String WORKFLOW_PATH_SUFFIX = ".workflow";
 
     private final Path stateHome;
@@ -31,7 +35,8 @@ final class ManagedProcessStore {
             return List.of();
         }
         try (var stream = Files.list(stateHome)) {
-            return stream.filter(path -> PathNames.fileName(path).endsWith(".pid"))
+            return stream.filter(ManagedProcessStore::isProcessStateFile)
+                    .filter(path -> PathNames.fileName(path).endsWith(".pid"))
                     .sorted()
                     .toList();
         }
@@ -53,7 +58,7 @@ final class ManagedProcessStore {
 
     private static boolean isProcessStateFile(Path path) {
         String name = PathNames.fileName(path);
-        return name.endsWith(".pid") || name.endsWith(WORKFLOW_PATH_SUFFIX);
+        return MANAGED_STATE_NAME.matcher(name).matches() && Files.isRegularFile(path);
     }
 
     private ManagedProcessFiles filesFromStateFile(Path path) {
@@ -119,7 +124,7 @@ final class ManagedProcessStore {
 
     private static String workflowStateName(Path workflowPath) {
         Path resolved = resolvedWorkflowPath(workflowPath);
-        String hash = Sha3.sha3_256(resolved.toString()).substring(0, 12);
+        String hash = Sha3.sha3_256(resolved.toString()).substring(0, STATE_NAME_HASH_LENGTH);
         return PathNames.fileName(resolved) + "." + hash;
     }
 

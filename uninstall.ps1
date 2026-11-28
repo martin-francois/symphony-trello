@@ -594,7 +594,11 @@ function Test-ManagedCodexWrapper([string]$Path) {
   if ($null -eq $content) {
     return $false
   }
-  return $content.Contains($CodexNpmPrefix)
+  $encodedPrefix = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($CodexNpmPrefix))
+  $quotedPrefix = "'" + $CodexNpmPrefix.Replace("'", "''") + "'"
+  return $content.Contains($CodexNpmPrefix) -or
+    $content.Contains($quotedPrefix) -or
+    $content.Contains("Buffer.from('$encodedPrefix','base64')")
 }
 
 function Remove-ManagedCodexArtifacts {

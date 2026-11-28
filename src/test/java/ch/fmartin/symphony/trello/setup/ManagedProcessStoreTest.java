@@ -3,12 +3,14 @@ package ch.fmartin.symphony.trello.setup;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.fmartin.symphony.trello.Sha3;
+import ch.fmartin.symphony.trello.process.PlatformEnvironment;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.MethodSource;
 
 final class ManagedProcessStoreTest {
     @TempDir
@@ -33,8 +35,14 @@ final class ManagedProcessStoreTest {
         assertThat(files.workflowPathFile()).hasFileName("WORKFLOW.md." + expectedHash + ".workflow");
     }
 
+    private static List<String> supportedWorkflowNames() {
+        return PlatformEnvironment.current().windows()
+                ? List.of("WORKFLOW.md", "WORKFLOW .md")
+                : List.of("WORKFLOW.md", "WORKFLOW .md", "WORKFLOW.md ");
+    }
+
+    @MethodSource("supportedWorkflowNames")
     @ParameterizedTest
-    @ValueSource(strings = {"WORKFLOW.md", "WORKFLOW.md "})
     void recordsTheWorkflowPathOfAStartAttemptAsGiven(String filename) throws Exception {
         // given
         Path stateHome = tempDir.resolve("state");

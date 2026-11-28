@@ -14,6 +14,10 @@ if ($command -eq '--version') {
   Write-Output 'symphony-trello test'
   exit 0
 }
+if ($command -eq 'start' -and $args[$main + 2] -eq '--all') {
+  Add-Content -LiteralPath $env:SYMPHONY_CONSOLE_TEST_BOUNDARIES -Value 'workers-started'
+  exit 0
+}
 if ($command -eq 'setup-local') {
   if ($env:SYMPHONY_TRELLO_INSTALLER_COMPLETION -eq 'defer') {
     New-Item -ItemType Directory -Force -Path $config | Out-Null
@@ -34,4 +38,4 @@ if ($command -eq 'setup-local') {
     exit 0
   }
 }
-throw 'cannot dispatch synthetic Java "command": expected installer setup'
+throw 'cannot dispatch synthetic Java "command": expected installer setup or start --all'

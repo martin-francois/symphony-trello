@@ -70,8 +70,38 @@ user systemd, macOS LaunchAgent, and native Windows Scheduled Task autostart whi
 When setup used real environment variables rather than saved `.env` credentials, installer-managed
 autostart needs the same runtime values after logout or reboot. The installer therefore writes a
 private autostart environment snapshot containing only Symphony/Trello/Codex/GitHub/OpenAI/
-Anthropic/Quarkus-prefixed variables from the installer session. This keeps `.env` semantics
-unchanged while making the service-manager path restartable.
+Anthropic/Quarkus-prefixed variables from the installer session. Windows also retains `PATH` and
+`JAVA_HOME` so the scheduled task selects the toolchain the installer validated. The task starts
+outside the terminal and otherwise uses the desktop environment, which can select another Java or
+omit session-local Codex and Git installations. Relying on the desktop environment was rejected
+because a successful task submission does not prove that those commands exist there. Capturing all
+environment variables was rejected because unrelated session data does not belong in autostart.
+The snapshot is replaced on each install or update and removed on uninstall; operators rerun the
+installer after changing toolchain locations. This keeps `.env` semantics unchanged while making
+the service-manager path restartable.
+
+Installation and update start workers directly through the installed wrapper and require that command
+to succeed before reporting completion. The scheduled task is installed for future logins. Immediate
+startup through `Start-ScheduledTask` was rejected because task submission succeeds before worker
+startup, and the hosted Windows runner accepted the task without creating a worker PID. The native
+lifecycle test now requires PID tracking as soon as the installer returns. A separate deferred-task
+fixture accepts task submission without running it and still requires immediate worker startup.
+
+Generated PowerShell scripts use UTF-8 with a byte-order mark. Windows PowerShell 5 launches
+scheduled tasks even when PowerShell 7 ran the installer; without the mark it reads non-ASCII
+paths as ANSI and fails to find the wrapper. Relying on the invoking shell's default encoding was
+rejected because those defaults differ. The native lifecycle test includes a non-ASCII install
+path and checks immediate restart after update; a native desktop run also verified the scheduled
+task launcher. The Startup-folder fallback uses a
+UTF-16 encoded PowerShell command inside its ASCII batch file, so the launch path does not depend
+on the active command-prompt code page. Embedding that path directly in ASCII was rejected because
+it replaces non-ASCII characters with question marks. A native fallback test executes the generated
+batch file and checks the launched wrapper's arguments. The Codex batch shim starts Node directly using the installed package's
+`bin` entry and an ASCII-safe base64 prefix. It imports that entry in the same process after setting
+`process.argv`, preserving native argument boundaries and signal handling. A PowerShell 5 bridge
+was rejected because it adds argument conversion and loses empty and quoted values. Node is already
+required by the npm installation. A native shim test checks Unicode paths, empty and quoted
+arguments, and the child exit status.
 
 The repository removes `docs/deployment.md` and `deploy/systemd/symphony-trello@.service`. README no
 longer has a separate "Production Deployment" section. `SPEC.md` no longer defines manual systemd as

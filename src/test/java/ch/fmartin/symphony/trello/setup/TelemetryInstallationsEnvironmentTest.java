@@ -66,10 +66,10 @@ final class TelemetryInstallationsEnvironmentTest {
     private Map<String, String> managedEnvironment() throws IOException {
         Map<String, String> environment = new HashMap<>();
         environment.put(
-                LocalWorkerPaths.CONFIG_DIR_ENV,
+                SetupEnvironmentVariables.CONFIG_DIR_ENV,
                 Files.createDirectories(tempDir.resolve("config")).toString());
         environment.put(
-                LocalWorkerPaths.STATE_HOME_ENV,
+                SetupEnvironmentVariables.STATE_HOME_ENV,
                 Files.createDirectories(tempDir.resolve("state")).toString());
         return environment;
     }

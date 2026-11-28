@@ -4425,6 +4425,7 @@ final class SetupDiagnosticReporterTest {
         // given
         Path configDir = tempDir.resolve("custom-config");
         Path workspaceRoot = tempDir.resolve("custom-workspaces");
+        Path stateHome = tempDir.resolve("custom-state-home");
         Path manifest = Path.of("relative-connected-boards.json");
         Path resolvedManifest = configDir.resolve(manifest);
         Path workflow = configDir.resolve("WORKFLOW.request.md");
@@ -4464,15 +4465,15 @@ final class SetupDiagnosticReporterTest {
                         "Setup failed for Private Queue, Private Done, Private Progress, and Private Blocked. "
                                 + "This token can access multiple Trello Workspaces. "
                                 + "Available Workspaces: abc (Secret Workspace), def (Client Space)"),
-                request(configDir, workspaceRoot, manifest, workflow, env),
+                request(configDir, workspaceRoot, manifest, workflow, env, false, Optional.of(stateHome)),
                 terminal);
 
         // then
         assertThat(report).hasValueSatisfying(path -> {
-            assertThat(path).startsWith(tempDir.resolve("state").resolve("troubleshooting"));
+            assertThat(path).startsWith(stateHome.resolve("troubleshooting"));
             assertThat(path)
                     .content(StandardCharsets.UTF_8)
-                    .contains("board_count:** 1", "19090")
+                    .contains("board_count:** 1", "19090", "--state-home \\<redacted>")
                     .doesNotContain(
                             "Request Board",
                             "request-board-id",
@@ -5349,6 +5350,7 @@ final class SetupDiagnosticReporterTest {
                         "--workspace-root",
                         tempDir.resolve("round-trip-workspaces").toString()),
                 Map.entry("--config-dir", configDir.toString()),
+                Map.entry("--state-home", tempDir.resolve("round-trip-state").toString()),
                 Map.entry("--manifest", configDir.resolve("boards.json").toString()),
                 Map.entry("--server-port", "19300"),
                 Map.entry("--env", configDir.resolve(".env").toString()),
@@ -5415,11 +5417,22 @@ final class SetupDiagnosticReporterTest {
 
     private static LocalSetupRequest request(
             Path configDir, Path workspaceRoot, Path manifest, Path workflow, Path env) {
-        return request(configDir, workspaceRoot, manifest, workflow, env, false);
+        return request(configDir, workspaceRoot, manifest, workflow, env, false, Optional.empty());
     }
 
     private static LocalSetupRequest request(
             Path configDir, Path workspaceRoot, Path manifest, Path workflow, Path env, boolean dryRun) {
+        return request(configDir, workspaceRoot, manifest, workflow, env, dryRun, Optional.empty());
+    }
+
+    private static LocalSetupRequest request(
+            Path configDir,
+            Path workspaceRoot,
+            Path manifest,
+            Path workflow,
+            Path env,
+            boolean dryRun,
+            Optional<Path> stateHome) {
         return new LocalSetupRequest(
                 LocalSetupRequest.Action.SETUP,
                 dryRun,
@@ -5432,6 +5445,7 @@ final class SetupDiagnosticReporterTest {
                 Optional.of("Request Board"),
                 Optional.empty(),
                 Optional.empty(),
+                Optional.empty(),
                 List.of("Private Queue"),
                 List.of("Private Done"),
                 "Private Progress",
@@ -5440,12 +5454,14 @@ final class SetupDiagnosticReporterTest {
                 Optional.of(workflow),
                 Optional.of(workspaceRoot),
                 Optional.of(configDir),
+                stateHome,
                 Optional.of(manifest),
                 Optional.empty(),
                 1,
                 false,
                 Optional.empty(),
                 Optional.empty(),
+                CodexReviewerOverrides.NONE,
                 Optional.of(env),
                 List.of(),
                 false,
