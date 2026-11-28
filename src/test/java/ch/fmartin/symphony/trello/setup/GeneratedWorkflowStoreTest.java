@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Locale;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -95,6 +96,30 @@ final class GeneratedWorkflowStoreTest {
     }
 
     @Test
+    void aManifestWhoseNameDiffersOnlyByCaseFollowsTheFilesystem() throws IOException {
+        // given
+        Path manifest = directory.resolve("Generated-Workflows.json");
+        boolean folds = directoryFoldsCase(directory);
+
+        // when
+        Throwable thrown = catchThrowable(() -> GeneratedWorkflowStore.validateManifestPath(manifest));
+
+        // then
+        assertThat(GeneratedWorkflowStore.caseFoldedReservedName(manifest)).isEqualTo(folds);
+        if (folds) {
+            assertThat(thrown)
+                    .isInstanceOf(TrelloBoardSetupException.class)
+                    .hasMessageContaining(GeneratedWorkflowStore.FILE_NAME)
+                    .hasMessageContaining(ConnectedBoardManifest.FILE_NAME);
+            assertThat(((TrelloBoardSetupException) thrown).code()).isEqualTo("setup_invalid_arguments");
+        } else {
+            assertThat(thrown).isNull();
+        }
+        assertThat(manifest).doesNotExist();
+        assertThat(directory.resolve(GeneratedWorkflowStore.FILE_NAME)).doesNotExist();
+    }
+
+    @Test
     void aManifestAliasToTheStoreIsNotOverwritten() throws IOException {
         // given
         Path target = Files.writeString(directory.resolve(GeneratedWorkflowStore.FILE_NAME), "{\"boards\":[]}");
@@ -176,6 +201,21 @@ final class GeneratedWorkflowStoreTest {
         assertThat(store.storePath()).isEqualTo(directory.resolve(GeneratedWorkflowStore.FILE_NAME));
         assertThat(directory.resolve("nested").resolve(GeneratedWorkflowStore.FILE_NAME))
                 .doesNotExist();
+    }
+
+    private static boolean directoryFoldsCase(Path directory) throws IOException {
+        Path probe = Files.createTempFile(directory, "casefold", ".probe");
+        try {
+            Path probeName = probe.getFileName();
+            if (probeName == null) {
+                return false;
+            }
+            String spelled = probeName.toString();
+            String folded = spelled.toUpperCase(Locale.ROOT);
+            return !folded.equals(spelled) && Files.exists(directory.resolve(folded));
+        } finally {
+            Files.deleteIfExists(probe);
+        }
     }
 
     private static GeneratedWorkflowRecord record(Path workflow, String body) {

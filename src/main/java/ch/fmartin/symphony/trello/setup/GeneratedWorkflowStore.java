@@ -12,6 +12,7 @@ import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import org.jspecify.annotations.NullMarked;
@@ -52,7 +53,8 @@ final class GeneratedWorkflowStore {
         try {
             collision =
                     prospectiveRealPath(manifest, new HashSet<>()).equals(prospectiveRealPath(store, new HashSet<>()))
-                            || (Files.exists(manifest) && Files.exists(store) && Files.isSameFile(manifest, store));
+                            || (Files.exists(manifest) && Files.exists(store) && Files.isSameFile(manifest, store))
+                            || caseFoldedReservedName(manifest);
         } catch (IOException e) {
             throw new TrelloBoardSetupException(
                     "setup_invalid_arguments",
@@ -65,6 +67,45 @@ final class GeneratedWorkflowStore {
                     "The connected-board manifest resolves to " + FILE_NAME
                             + " and that file is reserved for generated workflow provenance. Pass --manifest with "
                             + ConnectedBoardManifest.FILE_NAME + " or another filename instead.");
+        }
+    }
+
+    /// A missing file keeps the caller's spelling, and a Unix path compares that spelling with case.
+    /// When the manifest name matches the store name in another case, ask the directory that already
+    /// exists whether the two spellings are one file. A failed probe is not a collision.
+    static boolean caseFoldedReservedName(Path manifest) {
+        Path fileName = manifest.getFileName();
+        if (fileName == null) {
+            return false;
+        }
+        String requested = fileName.toString();
+        if (requested.equals(FILE_NAME) || !requested.equalsIgnoreCase(FILE_NAME)) {
+            return false;
+        }
+        Path directory = manifest.toAbsolutePath().getParent();
+        while (directory != null && !Files.isDirectory(directory)) {
+            directory = directory.getParent();
+        }
+        if (directory == null) {
+            return false;
+        }
+        Path probe = null;
+        try {
+            probe = Files.createTempFile(directory, "casefold", ".probe");
+            Path probeName = probe.getFileName();
+            if (probeName == null) {
+                return false;
+            }
+            String spelled = probeName.toString();
+            String folded = spelled.toUpperCase(Locale.ROOT);
+            if (folded.equals(spelled)) {
+                return false;
+            }
+            return Files.exists(directory.resolve(folded));
+        } catch (IOException e) {
+            return false;
+        } finally {
+            AtomicFiles.deleteQuietly(probe);
         }
     }
 
