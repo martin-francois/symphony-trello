@@ -99,6 +99,15 @@ final class ManagedProcessStore {
         return Files.deleteIfExists(pidFile);
     }
 
+    void rotateLogsForReplacedBoards(ConnectedBoard board, List<ConnectedBoard> replacedBoards) throws IOException {
+        for (ConnectedBoard replaced : replacedBoards) {
+            if (PathsEqual.samePath(replaced.workflowPath(), board.workflowPath())
+                    && !replaced.boardId().equals(board.boardId())) {
+                rotateLogsForNewBoardIdentity(replaced.workflowPath());
+            }
+        }
+    }
+
     /// Moves the worker logs aside when a workflow path is reused for a different Trello board, so
     /// diagnostics for the new board do not surface the previous board's history. Rotated files use
     /// a suffix that the diagnostics log selection does not match.

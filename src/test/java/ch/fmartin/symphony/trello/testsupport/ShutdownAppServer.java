@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.testsupport;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.InetAddress;
@@ -60,7 +61,13 @@ public final class ShutdownAppServer {
                 if (line.contains("\"method\":\"initialize\"")) {
                     System.out.println("{\"id\":1,\"result\":{}}");
                 } else if (line.contains("\"method\":\"thread/start\"")) {
-                    System.out.println("{\"id\":2,\"result\":{\"thread\":{\"id\":\"thread\"}}}");
+                    var json = new ObjectMapper();
+                    String permissions = json.readTree(line)
+                            .path("params")
+                            .path("permissions")
+                            .asText();
+                    System.out.println("{\"id\":2,\"result\":{\"activePermissionProfile\":{\"id\":"
+                            + json.writeValueAsString(permissions) + "},\"thread\":{\"id\":\"thread\"}}}");
                 } else if (line.contains("\"method\":\"turn/start\"")) {
                     System.out.println("{\"id\":3,\"result\":{\"turn\":{\"id\":\"turn\"}}}");
                     Files.writeString(directory.resolve("started"), "turn started");

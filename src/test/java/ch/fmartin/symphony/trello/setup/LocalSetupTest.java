@@ -17,8 +17,10 @@ import static ch.fmartin.symphony.trello.testsupport.WorkflowAssertions.assertTh
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.abort;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 import ch.fmartin.symphony.trello.config.ConfigDefaults;
@@ -49,6 +51,7 @@ import org.junit.jupiter.api.parallel.ResourceLock;
 import org.junit.jupiter.api.parallel.Resources;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -1319,7 +1322,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_worker_board_ambiguous",
-                        "Multiple connected boards match --board. Re-run with a board id or short link.")
+                        "Multiple connected boards match --board. Re-run with a board id, short link, or --workflow.")
                 .stderrDoesNotContain(
                         "Duplicate Private Board",
                         "private-board-id-one",
@@ -1617,6 +1620,32 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         private String[] commandArray() {
             return command.toArray(String[]::new);
         }
+    }
+
+    @Test
+    void setupCarriesItsCustomManifestIntoWorkerStartup() throws Exception {
+        // given
+        Path manifest = fixture.configDir().resolve("custom-boards.json");
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Custom Registry",
+                "--no-github",
+                "--manifest",
+                manifest.toString());
+
+        // then
+        result.assertSuccess();
+        verify(fixture.workerManager())
+                .start(argThat(paths -> paths.manifestPath().equals(manifest)), any(), any(), any());
     }
 
     @Test
@@ -5316,6 +5345,79 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         assertThat(commands.commandEvents).containsExactly("stop:" + workflow);
     }
 
+    @CsvSource({
+        "false,false,false",
+        "false,true,false",
+        "true,false,false",
+        "true,true,false",
+        "false,false,true",
+        "false,true,true",
+        "true,false,true",
+        "true,true,true"
+    })
+    @ParameterizedTest
+    void forcedExistingBoardImportReusesSourceAliasPort(boolean running, boolean explicitPort, boolean siblingSource)
+            throws Exception {
+        // given
+        Path config = fixture.configDir();
+        Path managed = config.resolve("WORKFLOW.imported-alias.md");
+        Path sourceDirectory = siblingSource ? config : tempDir.resolve("source");
+        Path source = sourceDirectory.resolve("WORKFLOW.source.md");
+        Path env = tempDir.resolve(".env.source-alias");
+        int configuredPort = availablePort();
+        fixture.givenWorkflow(managed, "board-1", configuredPort);
+        fixture.givenWorkflow(source, "board-1", configuredPort);
+        String managedBefore = Files.readString(managed);
+        ConnectedBoard previous = ConnectedBoardBuilder.connectedBoard(managed)
+                .withBoardId("board-1")
+                .withBoardName("Source Alias")
+                .withSourceWorkflowPath(source)
+                .withEnvPath(env)
+                .withServerPort(configuredPort)
+                .build();
+        Path manifestPath = config.resolve(ConnectedBoardManifest.FILE_NAME);
+        new ConnectedBoardRepository(manifestPath).save(new ConnectedBoardManifest(List.of(previous)));
+        Files.writeString(env, TestEnv.trelloCredentials());
+        if (running) {
+            commands.startHealthServer(managed);
+        }
+        var args = new ArrayList<>(List.of(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "board-1",
+                "--workflow",
+                source.toString(),
+                "--env",
+                env.toString(),
+                "--force",
+                "--no-start",
+                "--no-github"));
+        if (explicitPort) {
+            args.addAll(List.of("--server-port", Integer.toString(configuredPort)));
+        }
+
+        // when
+        SetupRunResult result = runSetupWithProductionDefaultPort(args.toArray(String[]::new));
+
+        // then
+        result.assertSuccess().stdoutContains("Board connected: \"Imported Queue\"");
+        assertThatWorkflow(source).hasServerPort(configuredPort);
+        assertThat(managed).hasContent(managedBefore);
+        ConnectedBoardManifest after = new ConnectedBoardRepository(manifestPath).loadForLifecycle();
+        assertThat(after.boards()).singleElement().satisfies(board -> {
+            assertThat(board.workflowPath()).isEqualTo(source);
+            assertThat(board.serverPort()).isEqualTo(configuredPort);
+        });
+        assertThat(after.selectWorkflow(source).map(ConnectedBoard::boardId)).hasValue("board-1");
+        assertThat(commands.commandEvents).containsExactly("stop:" + managed);
+    }
+
     @Test
     void forcedExistingBoardImportPreservesRunningWorkflowServerPort() throws Exception {
         // given
@@ -7257,8 +7359,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         secondResult
                 .assertFailure(SETUP_FAILURE)
                 .stderrContains(
-                        "setup_github_upgrade_not_found",
-                        "No connected non-GitHub board matches \"definitely-not-a-board\"")
+                        "setup_worker_board_not_found",
+                        "cannot resolve connected board: run symphony-trello start --workflow PATH from a trusted terminal")
                 .stderrDoesNotContain("setup-local configure-github can apply", "Troubleshooting report written");
         assertThatWorkflow(workflow).hasNoGithubFlow();
         assertThat(commands.stoppedWorkflows).isEmpty();

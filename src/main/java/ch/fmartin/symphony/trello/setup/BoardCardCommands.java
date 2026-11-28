@@ -27,12 +27,10 @@ import java.util.Set;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
-/// Runs the `symphony-trello card` commands against one connected board. The commands resolve the
-/// board and its Trello credentials like `start` does, so an agent that runs them never handles
-/// the key or token, and they write through [TrelloCardWrites], so the workflow's `trello_tools`
-/// policy refuses the same writes it refuses for the worker.
+/// Trusted execution behind the card helper. It resolves a connected board and applies the
+/// workflow's write policy through [TrelloCardWrites]. Restricted clients use [CardHelperClient].
 @NullMarked
-final class BoardCardCommands {
+final class BoardCardCommands implements CardCommandRunner {
     private static final Set<String> CREDENTIAL_FAILURE_CODES =
             Set.of("trello_auth_failed", "trello_permission_denied");
 
@@ -50,9 +48,16 @@ final class BoardCardCommands {
         this.json = new ObjectMapper().setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE);
     }
 
-    int run(CardCommandRequest request, PrintStream out) throws IOException {
+    @Override
+    public int run(CardCommandRequest request, PrintStream out) throws IOException {
         LocalWorkerPaths paths = LocalWorkerPaths.from(
                 Optional.empty(), request.configDir(), Optional.empty(), Optional.empty(), environment);
+        try (var ignored = new ConnectedBoardRepository(paths.manifestPath()).lock()) {
+            return runConnected(request, paths, out);
+        }
+    }
+
+    private int runConnected(CardCommandRequest request, LocalWorkerPaths paths, PrintStream out) throws IOException {
         CardCommandTarget target = workerManager.cardCommandTarget(
                 paths, request.board(), request.workflow(), request.operation().commandName());
         Result result;

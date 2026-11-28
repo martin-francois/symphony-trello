@@ -76,6 +76,10 @@ final class TrelloBoardSetupService {
         }
     }
 
+    ManagedFileLock connectionTransaction(Path manifestPath) throws IOException {
+        return new ConnectedBoardRepository(manifestPath).lock();
+    }
+
     void preflightRequestedServerPort(Integer requestedPort, Path workflowPath, boolean force, Path manifestPath) {
         if (requestedPort == null || requestedPort == 0) {
             return;
@@ -88,10 +92,7 @@ final class TrelloBoardSetupService {
             throw manifestUnavailable(exception);
         }
         Optional<ConnectedBoard> replaceableBoard = force
-                ? manifest.boards().stream()
-                        .filter(board -> board.serverPort() == requestedPort)
-                        .filter(board -> PathsEqual.samePath(board.workflowPath(), workflowPath))
-                        .findAny()
+                ? manifest.selectWorkflow(workflowPath).filter(board -> board.serverPort() == requestedPort)
                 : Optional.empty();
         boolean reservedByAnotherWorkflow = manifest.boards().stream()
                 .filter(board -> board.serverPort() == requestedPort)
@@ -214,7 +215,7 @@ final class TrelloBoardSetupService {
         boolean restartReplacedWorker;
         ConnectedBoardManifest.Registration registration;
         var boards = new ConnectedBoardRepository(manifestPath);
-        try {
+        try (var _ = boards.lock()) {
             registration = boards.loadForLifecycle().register(board);
             List<ConnectedBoard> replacedBoards = registration.replacedBoards();
             restartReplacedWorker = replacedBoards.stream()
@@ -290,15 +291,22 @@ final class TrelloBoardSetupService {
     private LocalWorkerPaths localWorkerPaths(Path manifestPath, Path workspaceRoot) {
         Path configDir = Objects.requireNonNullElseGet(
                 manifestPath.toAbsolutePath().normalize().getParent(), () -> Path.of("."));
-        return LocalWorkerPaths.fromSetup(configDir, workspaceRoot, environment);
+        return LocalWorkerPaths.fromSetup(configDir, workspaceRoot, environment).withManifestPath(manifestPath);
     }
 
     private TrelloBoardSetup setup(TrelloBoardSetupMain.BoardSetupOptions options) {
-        if (!options.hasExplicitCodexModelRequest()) {
-            return setup;
+        TrelloBoardSetup configured = setup;
+        if (options.hasExplicitCodexModelRequest()) {
+            configured = setup.withCodexModelOverrides(
+                    setup.resolvedCodexModelSelectionDefaults(), options.codexModel(), options.codexReasoningEffort());
         }
-        return setup.withCodexModelOverrides(
-                setup.resolvedCodexModelSelectionDefaults(), options.codexModel(), options.codexReasoningEffort());
+        try {
+            ConnectedBoardManifest manifest =
+                    new ConnectedBoardRepository(options.manifestPath(environment)).loadForLifecycle();
+            return configured.withReplacedConnection(manifest, options.workflowPath, options.force);
+        } catch (IOException exception) {
+            throw manifestUnavailable(exception);
+        }
     }
 
     private static void printWorkspaces(PrintStream out, List<TrelloBoardSetup.WorkspaceInfo> workspaces) {

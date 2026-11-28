@@ -246,11 +246,6 @@ skill's advice.
   `findFirst()` unless duplicates are equivalent. Prefer a bounded shape such as
   `filter(...).limit(2).toList()` with an explicit zero/one/ambiguous branch when that preserves the
   existing conflict behavior and avoids collecting every duplicate.
-- Optional issues [#69](https://github.com/martinfrancois/java-optionals-skill/issues/69) and
-  [#70](https://github.com/martinfrancois/java-optionals-skill/issues/70): side-effecting
-  boundaries such as checked prompting, checked IO, Trello writes, or comment upserts may use an
-  explicit empty guard and one local value read. Do not force those branches into Optional lambdas or
-  generic checked-Optional helpers.
 - Optional issue
   [#67](https://github.com/martinfrancois/java-optionals-skill/issues/67): when Optional presence
   gates a simple unchecked validation or other side effect, prefer `ifPresent(...)` when it keeps the

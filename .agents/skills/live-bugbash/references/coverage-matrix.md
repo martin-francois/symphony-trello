@@ -108,7 +108,7 @@ Cover at least one scenario for each group, using fake integrations by default a
 Use fake Codex by default and real Codex only when `CODEX_MODE=real`. Execute host-level dangerous Codex modes only when `HOST_PROFILE=hardened`; otherwise cover them by generated config, validation, fake Codex, and source inspection.
 
 - launch command cwd is the per-card workspace
-- POSIX `bash -lc <codex.command>` behavior when applicable
+- POSIX `bash -c <codex.command>` behavior when applicable
 - initialize and initialized order
 - thread start or resume behavior
 - model and reasoning effort pass-through

@@ -110,10 +110,6 @@ public class TrelloHandoffToolHandler {
         }
     }
 
-    public boolean shouldEnableExperimentalApi(EffectiveConfig config) {
-        return config.trelloTools().enabled();
-    }
-
     public ArrayNode toolSpecs(EffectiveConfig config) {
         ArrayNode tools = json.createArrayNode();
         if (!writesEnabled(config)) {

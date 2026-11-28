@@ -388,6 +388,7 @@ $ConfigDir = [System.IO.Path]::GetFullPath($ConfigDir)
 $WorkspaceRoot = [System.IO.Path]::GetFullPath($WorkspaceRoot)
 $BinDir = [System.IO.Path]::GetFullPath($BinDir)
 $StateHome = [System.IO.Path]::GetFullPath($StateHome)
+$CardRequestsHome = $StateHome.TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar) + "-card-requests"
 $AutostartEnvironmentPath = Join-Path $ConfigDir "autostart-env.ps1"
 $AutostartScriptPath = Join-Path $BinDir "symphony-trello-autostart.ps1"
 $CodexHome = [System.IO.Path]::GetFullPath((Join-Path $SymphonyHome "codex"))
@@ -492,7 +493,7 @@ function Assert-CommandDirectory {
       throw "--bin-dir must be a directory."
     }
   }
-  foreach ($root in @($Prefix, $ConfigDir, $WorkspaceRoot, $StateHome)) {
+  foreach ($root in @($Prefix, $ConfigDir, $WorkspaceRoot, $StateHome, $CardRequestsHome)) {
     if ((Test-SameOrInsidePath $normalizedBinDir $root) -or (Test-SameOrInsidePath $root $normalizedBinDir)) {
       throw "--bin-dir must not overlap Symphony app, config, workspace, or state directories."
     }
@@ -525,8 +526,8 @@ function Assert-AppPaths {
       throw "--prefix must be a directory."
     }
   }
-  foreach ($root in @($ConfigDir, $WorkspaceRoot, $StateHome)) {
-    if ((-not (Test-Path -LiteralPath $root)) -and
+  foreach ($root in @($ConfigDir, $WorkspaceRoot, $StateHome, $CardRequestsHome)) {
+    if ($root -ne $CardRequestsHome -and (-not (Test-Path -LiteralPath $root)) -and
         ((Test-SameOrInsidePath $normalizedPrefix $root) -or (Test-SameOrInsidePath $root $normalizedPrefix))) {
       throw "--prefix must not overlap Symphony config, workspace, or state directories."
     }
@@ -546,10 +547,12 @@ function Assert-AppRemovalPreservesCurrentData {
   } elseif ((-not $YesLocalData) -and (Test-Path -LiteralPath $WorkspaceRoot) -and (Test-SameOrInsidePath $WorkspaceRoot $Prefix)) {
     $cleanupPaths += "WORKSPACES $WorkspaceRoot"
   }
-  if ((-not $RemoveState) -and (Test-Path -LiteralPath $StateHome) -and (Test-SameOrInsidePath $StateHome $Prefix)) {
-    $conflicts += "STATE/LOGS $StateHome"
-  } elseif ((-not $YesLocalData) -and (Test-Path -LiteralPath $StateHome) -and (Test-SameOrInsidePath $StateHome $Prefix)) {
-    $cleanupPaths += "STATE/LOGS $StateHome"
+  foreach ($statePath in @($StateHome, $CardRequestsHome)) {
+    if ((-not $RemoveState) -and (Test-Path -LiteralPath $statePath) -and (Test-SameOrInsidePath $statePath $Prefix)) {
+      $conflicts += "STATE/LOGS $statePath"
+    } elseif ((-not $YesLocalData) -and (Test-Path -LiteralPath $statePath) -and (Test-SameOrInsidePath $statePath $Prefix)) {
+      $cleanupPaths += "STATE/LOGS $statePath"
+    }
   }
   if ($conflicts.Count -gt 0) {
     [Console]::Error.WriteLine("Refusing to remove app directory because it contains current local data that is preserved by default:`n  $($conflicts -join "`n  ")`nUse a dedicated app checkout path, or pass the matching cleanup scope with --yes-local-data.")
@@ -672,6 +675,39 @@ function Assert-SafeRemovalPath([string]$Path) {
   return $trimmed
 }
 
+function Get-ResolvedCleanupPath([string]$Path, [int]$Depth = 0) {
+  if ($Depth -gt 40) { throw "Cannot validate cleanup path: too many links in $Path" }
+  $fullPath = [System.IO.Path]::GetFullPath($Path)
+  $root = [System.IO.Path]::GetPathRoot($fullPath)
+  $parts = $fullPath.Substring($root.Length).Split([char[]]@([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar), [System.StringSplitOptions]::RemoveEmptyEntries)
+  $current = $root
+  for ($i = 0; $i -lt $parts.Length; $i++) {
+    $current = Join-Path $current $parts[$i]
+    $item = Get-Item -LiteralPath $current -Force -ErrorAction SilentlyContinue
+    if ($item -and ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+      $target = @($item.Target)[0]
+      if ([string]::IsNullOrWhiteSpace($target)) { throw "Cannot validate cleanup path: unresolved link $current" }
+      if (-not [System.IO.Path]::IsPathRooted($target)) {
+        $target = Join-Path (Split-Path -Parent $current) $target
+      }
+      for ($j = $i + 1; $j -lt $parts.Length; $j++) { $target = Join-Path $target $parts[$j] }
+      return Get-ResolvedCleanupPath $target ($Depth + 1)
+    }
+  }
+  return $current
+}
+
+function Assert-StateCleanupPreservesData([string]$Preserved, [string]$Scope) {
+  $resolvedPreserved = Get-ResolvedCleanupPath $Preserved
+  foreach ($selected in @($StateHome, $CardRequestsHome)) {
+    $resolvedSelected = Get-ResolvedCleanupPath $selected
+    if ((Test-SameOrInsidePath $selected $Preserved) -or (Test-SameOrInsidePath $Preserved $selected) -or
+        (Test-SameOrInsidePath $resolvedSelected $resolvedPreserved) -or (Test-SameOrInsidePath $resolvedPreserved $resolvedSelected)) {
+      throw "State cleanup overlaps preserved local data: $Preserved. Select and confirm $Scope, or use separate directories."
+    }
+  }
+}
+
 function Assert-RequestedRemovalPaths {
   if ($RemoveConfig) {
     Assert-SafeRemovalPath $ConfigDir | Out-Null
@@ -681,6 +717,9 @@ function Assert-RequestedRemovalPaths {
   }
   if ($RemoveState) {
     Assert-SafeRemovalPath $StateHome | Out-Null
+    Assert-SafeRemovalPath $CardRequestsHome | Out-Null
+    if (-not $RemoveConfig) { Assert-StateCleanupPreservesData $ConfigDir "--remove-config" }
+    if (-not $RemoveWorkspaces) { Assert-StateCleanupPreservesData $WorkspaceRoot "--remove-workspaces" }
   }
 }
 
@@ -753,6 +792,42 @@ function Get-WorkerLabel {
     return $PidFileBaseName.Substring(0, $PidFileBaseName.LastIndexOf('.'))
   }
   return $PidFileBaseName
+}
+
+function Stop-CardHelper {
+  $helperHome = Join-Path $StateHome "card-helper"
+  foreach ($directory in @(Get-ChildItem -LiteralPath $helperHome -Directory -ErrorAction SilentlyContinue)) {
+    if ($directory.Attributes -band [IO.FileAttributes]::ReparsePoint) { continue }
+    $readyPath = Join-Path $directory.FullName "ready.json"
+    $readyFile = Get-Item -LiteralPath $readyPath -ErrorAction SilentlyContinue
+    if (-not $readyFile -or $readyFile.PSIsContainer -or $readyFile.Length -gt 1024 -or
+        ($readyFile.Attributes -band [IO.FileAttributes]::ReparsePoint)) { continue }
+    try {
+      $ready = Get-Content -LiteralPath $readyPath -Raw | ConvertFrom-Json -ErrorAction Stop
+      $helperPid = 0
+      if (-not [int]::TryParse([string]$ready.pid, [ref]$helperPid) -or $helperPid -le 0) { continue }
+    } catch { continue }
+    $process = $null
+    try {
+      $process = Get-CimInstance Win32_Process -Filter "ProcessId = $helperPid" -ErrorAction Stop
+    } catch { $process = $null }
+    if (-not $process -or [string]::IsNullOrWhiteSpace($process.CommandLine)) {
+      if (Get-Process -Id $helperPid -ErrorAction SilentlyContinue) {
+        throw "cannot verify card helper: inspect the recorded process from a trusted terminal before retrying uninstall"
+      }
+      continue
+    }
+    $marker = "-Dsymphony.trello.card_helper_root=$($directory.FullName)"
+    if (-not (Test-CommandLineArgument $process.CommandLine $marker) -or
+        -not (Test-CommandLineArgument $process.CommandLine "ch.fmartin.symphony.trello.setup.CardHelperMain") -or
+        -not (Test-CommandLineArgument $process.CommandLine $ConfigDir)) { continue }
+    if ($DryRun) {
+      Write-Status "WOULD STOP" "  trusted card helper pid=$helperPid"
+    } else {
+      Write-Status "STOP" "  trusted card helper pid=$helperPid"
+      Stop-AndWaitManagedProcess $helperPid
+    }
+  }
 }
 
 function Stop-ManagedProcesses {
@@ -848,12 +923,18 @@ if (Test-InstallerManagedCodexSkill) { Write-Status "CODEX SKILL" "     $CodexSk
 Write-Status "WORKERS" "         Managed Symphony workers are stopped before removal"
 if ($RemoveConfig) { Write-Status "CONFIG" "          $ConfigDir" }
 if ($RemoveWorkspaces) { Write-Status "WORKSPACES" "      $WorkspaceRoot" }
-if ($RemoveState) { Write-Status "STATE/LOGS" "      $StateHome" }
+if ($RemoveState) {
+  Write-Status "STATE/LOGS" "      $StateHome"
+  Write-Status "CARD REQUESTS" "   $CardRequestsHome"
+}
 Write-Host
 Write-Heading "Will preserve:"
 if (-not $RemoveConfig) { Write-Status "CONFIG" "          $ConfigDir" }
 if (-not $RemoveWorkspaces) { Write-Status "WORKSPACES" "      $WorkspaceRoot" }
-if (-not $RemoveState) { Write-Status "STATE/LOGS" "      $StateHome" }
+if (-not $RemoveState) {
+  Write-Status "STATE/LOGS" "      $StateHome"
+  Write-Status "CARD REQUESTS" "   $CardRequestsHome"
+}
 Write-Status "AUTH" "            Codex login/auth files and GitHub auth"
 Write-Status "TRELLO" "          Trello boards are not deleted or archived"
 Write-Host
@@ -862,6 +943,7 @@ if (Confirm-Step "Remove installer-managed app files and CLI executable?" $Yes) 
     throw "Refusing to remove app directory without Symphony installer marker: $Prefix"
   }
   Assert-AppRemovalPreservesCurrentData
+  Stop-CardHelper
   Stop-ManagedProcesses
   Remove-WindowsAutostart
   Remove-ManagedPath "$BinDir\symphony-trello.ps1"
@@ -891,10 +973,15 @@ if ($RemoveWorkspaces -and (Test-Path $WorkspaceRoot)) {
   }
 }
 
-if ($RemoveState -and (Test-Path $StateHome)) {
+if ($RemoveState -and ((Test-Path -LiteralPath $StateHome) -or (Test-Path -LiteralPath $CardRequestsHome))) {
   Write-Host
   if (Confirm-Step "Remove local state and logs?" $YesLocalData) {
+    if (-not $DryRun) {
+      if (Test-Path -LiteralPath $ConfigDir) { Assert-StateCleanupPreservesData $ConfigDir "--remove-config" }
+      if (Test-Path -LiteralPath $WorkspaceRoot) { Assert-StateCleanupPreservesData $WorkspaceRoot "--remove-workspaces" }
+    }
     Remove-ManagedPath $StateHome
+    Remove-ManagedPath $CardRequestsHome
   } else {
     Write-Host "Kept local state and logs: $StateHome"
   }

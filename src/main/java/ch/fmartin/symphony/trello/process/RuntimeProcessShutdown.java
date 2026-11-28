@@ -20,6 +20,15 @@ public final class RuntimeProcessShutdown {
             var owned = new ArrayList<>(descendants.toList());
             owned.add(process.toHandle());
             stop(owned, PHASE_TIMEOUT);
+            if (PlatformEnvironment.current().windows()) {
+                var processIds = new ArrayList<Long>();
+                for (ProcessHandle handle : owned) {
+                    processIds.add(handle.pid());
+                }
+                if (!WindowsProcessExit.awaitExited(processIds, PHASE_TIMEOUT)) {
+                    throw new UnconfirmedExitException();
+                }
+            }
         } catch (UnconfirmedExitException e) {
             throw e;
         } catch (RuntimeException e) {
